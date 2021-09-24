@@ -261,7 +261,6 @@ type SDSReport struct {
 
 // Encode this SDS-REPORT PDU
 func (r SDSReport) Encode(bytes []byte, bits int) ([]byte, int) {
-
 	bytes, bits = r.protocol.Encode(bytes, bits)
 
 	var byte1 byte
@@ -302,6 +301,17 @@ const SDSShortReportPDUIdentifier byte = 0x7A
 type SDSShortReport struct {
 	ReportType       ShortReportType
 	MessageReference MessageReference
+}
+
+// Encode this SDS-SHORT-REPORT PDU
+func (r SDSShortReport) Encode(bytes []byte, bits int) ([]byte, int) {
+	byte0 := byte(0x7C) | byte(r.ReportType)
+	bytes = append(bytes, byte0)
+	bits += 8
+
+	bytes, bits = r.MessageReference.Encode(bytes, bits)
+
+	return bytes, bits
 }
 
 // ParseSDSTransfer parses a SDS-TRANSFER PDU from the given bytes
@@ -947,6 +957,11 @@ func (s Status) Bytes() []byte {
 	}
 }
 
+// Encode this status
+func (s Status) Encode(bytes []byte, bits int) ([]byte, int) {
+	return append(bytes, s.Bytes()...), bits + 16
+}
+
 // Length returns the length of this encoded status in bytes.
 func (s Status) Length() int {
 	return 2
@@ -968,6 +983,7 @@ const (
 	Status9 Status = 0x800B
 
 	// responses
+
 	StatusA Status = 0x80F2
 	StatusE Status = 0x80F3
 	StatusC Status = 0x80F4
