@@ -13,7 +13,6 @@ UDH: User Data Header
 
 Restrictions:
 Store/forward control information is not supported yet.
-Only ISO8859-1 supported as text encoding.
 
 */
 package sds

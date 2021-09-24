@@ -4,13 +4,13 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"log"
 	"strings"
 	"time"
 )
 
 const (
-	readBufferSize = 1024
+	readBufferSize        = 1024
+	atSendingQueueTimeout = 500 * time.Millisecond
 )
 
 func New(device io.ReadWriter) *COM {
@@ -23,8 +23,8 @@ func New(device io.ReadWriter) *COM {
 	}
 
 	go func() {
-		log.Print("entering COM loop")
-		defer log.Print("exiting COM loop")
+		// log.Print("entering COM loop")
+		// defer log.Print("exiting COM loop")
 		defer close(result.closed)
 
 		var commandCancelled <-chan struct{}
@@ -37,7 +37,6 @@ func New(device io.ReadWriter) *COM {
 			select {
 			case line, valid := <-lines:
 				if !valid {
-					log.Print("lines channel closed")
 					return
 				}
 				// log.Printf("rx: %s", line)
@@ -102,8 +101,8 @@ type COM struct {
 func readLoop(r io.Reader) <-chan string {
 	lines := make(chan string, 1)
 	go func() {
-		log.Print("entering read loop")
-		defer log.Print("exiting read loop")
+		// log.Print("entering read loop")
+		// defer log.Print("exiting read loop")
 
 		buf := make([]byte, readBufferSize)
 		currentLine := make([]byte, 0, readBufferSize)
@@ -116,7 +115,7 @@ func readLoop(r io.Reader) <-chan string {
 				close(lines)
 				return
 			} else if err != nil {
-				log.Printf("read error: %v", err)
+				// log.Printf("read error: %v", err)
 				if len(currentLine) > 0 {
 					lines <- string(currentLine)
 				}
@@ -166,7 +165,6 @@ func (c *COM) newIndication(line string) *indication {
 	for _, config := range c.indications {
 		result := config.NewIfMatches(line)
 		if result != nil {
-			log.Printf("%s is an indication", config.prefix)
 			return result
 		}
 	}
@@ -180,7 +178,7 @@ func (c *COM) ClearSyntaxErrors(ctx context.Context) error {
 			return nil
 		}
 		if err.Error() == "+CME ERROR: 35" {
-			log.Printf(".")
+			// log.Printf(".")
 			time.Sleep(200)
 		} else {
 			return err
@@ -202,7 +200,7 @@ func (c *COM) AT(ctx context.Context, request string) ([]string, error) {
 	case c.commands <- cmd:
 	case <-ctx.Done():
 		return nil, ctx.Err()
-	case <-time.After(500 * time.Millisecond):
+	case <-time.After(atSendingQueueTimeout):
 		return nil, fmt.Errorf("AT sending queue timeout")
 	}
 
@@ -254,14 +252,12 @@ type indication struct {
 }
 
 func (ind *indication) AddLine(line string) {
-	log.Printf("%s add line %s, actual: %d, expected %d", ind.config.prefix, line, len(ind.lines), ind.config.trailingLines)
 	if ind.Complete() {
 		return
 	}
 
 	ind.lines = append(ind.lines, line)
 	if ind.Complete() {
-		log.Printf("%s is complete, actual: %d, expected %d\n%v", ind.config.prefix, len(ind.lines), ind.config.trailingLines, strings.Join(ind.lines, "\n"))
 		go func() {
 			ind.config.handler(ind.lines)
 		}()

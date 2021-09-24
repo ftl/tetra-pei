@@ -2,7 +2,6 @@ package sds
 
 import (
 	"fmt"
-	"log"
 	"time"
 
 	"github.com/ftl/tetra-pei/tetra"
@@ -114,7 +113,7 @@ func (s *Stack) WithResponseCallback(callback ResponseCallback) *Stack {
 func (s *Stack) Put(part IncomingMessage) error {
 	switch payload := part.Payload.(type) {
 	case Status:
-		log.Print("incoming status")
+		// log.Print("incoming status")
 		if s.statusCallback == nil {
 			return nil
 		}
@@ -124,7 +123,7 @@ func (s *Stack) Put(part IncomingMessage) error {
 			Value:       payload,
 		})
 	case SimpleTextMessage:
-		log.Print("incoming simple text message")
+		// log.Print("incoming simple text message")
 		if s.messageCallback == nil {
 			return nil
 		}
@@ -137,7 +136,7 @@ func (s *Stack) Put(part IncomingMessage) error {
 		message.SetPart(1, payload.Text)
 		s.messageCallback(message)
 	case SDSTransfer:
-		log.Print("incoming SDS-TRANSFER")
+		// log.Print("incoming SDS-TRANSFER")
 		return s.putSDSTransfer(part.Header, payload)
 	default:
 		return fmt.Errorf("unexpected message type %T", payload)
