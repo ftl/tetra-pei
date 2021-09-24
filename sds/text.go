@@ -2,6 +2,7 @@ package sds
 
 import (
 	"fmt"
+	"regexp"
 	"time"
 
 	"golang.org/x/text/encoding"
@@ -189,4 +190,37 @@ func AppendEncodedPayloadText(bytes []byte, bits int, text string, textEncoding 
 	bytes = append(bytes, encodedBytes...)
 	bits += encodedBits
 	return bytes, bits
+}
+
+var leadingOPTA = regexp.MustCompile(`^[A-Za-z ]+#[0-9]{16}`)
+
+func SplitLeadingOPTA(s string) (string, string) {
+	opta := leadingOPTA.FindString(s)
+	return opta, s[len(opta):]
+}
+
+func RemoveLeadingOPTA(s string) string {
+	_, result := SplitLeadingOPTA(s)
+	return result
+}
+
+var trailingITSI = regexp.MustCompile(`((\x1a\x00)|(\x0d\x0d))([0-9]{16})$`)
+
+func SplitTrailingITSI(s string) (string, string) {
+	groups := trailingITSI.FindStringSubmatch(s)
+	var itsi string
+	var matchLen int
+	if len(groups) == 0 {
+		itsi = ""
+		matchLen = 0
+	} else {
+		itsi = groups[len(groups)-1]
+		matchLen = len(groups[0])
+	}
+	return s[0 : len(s)-matchLen], itsi
+}
+
+func RemoveTrailingITSI(s string) string {
+	result, _ := SplitTrailingITSI(s)
+	return result
 }
