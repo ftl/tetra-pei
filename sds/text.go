@@ -2,8 +2,11 @@ package sds
 
 import (
 	"fmt"
-	"log"
 	"time"
+
+	"golang.org/x/text/encoding"
+	"golang.org/x/text/encoding/charmap"
+	"golang.org/x/text/encoding/unicode"
 )
 
 /* Text related types and functions */
@@ -11,11 +14,66 @@ import (
 // TextEncoding enum according to [AI] 29.5.4.1
 type TextEncoding byte
 
-// All supported text encoding schemes, according to [AI] table 29.29
+// All defined text encoding schemes, according to [AI] table 29.29
 const (
-	Packed7Bit TextEncoding = 0
-	ISO8859_1  TextEncoding = 1
+	Packed7Bit TextEncoding = iota
+	ISO8859_1
+	ISO8859_2
+	ISO8859_3
+	ISO8859_4
+	ISO8859_5
+	ISO8859_6
+	ISO8859_7
+	ISO8859_8
+	ISO8859_9
+	ISO8859_10
+	ISO8859_13
+	ISO8859_14
+	ISO8859_15
+	CodePage437
+	CodePage737
+	CodePage850
+	CodePage852
+	CodePage855
+	CodePage857
+	CodePage860
+	CodePage861
+	CodePage863
+	CodePage865
+	CodePage866
+	CodePage869
+	UTF16BE
+	VISCII
 )
+
+// TextCodecs contains encoding.Encoding instances for all supported text encoding schemes.
+// Beware that not all defined schemes are actually supported here.
+var TextCodecs = map[TextEncoding]encoding.Encoding{
+	ISO8859_1:   charmap.ISO8859_1,
+	ISO8859_2:   charmap.ISO8859_2,
+	ISO8859_3:   charmap.ISO8859_3,
+	ISO8859_4:   charmap.ISO8859_4,
+	ISO8859_5:   charmap.ISO8859_5,
+	ISO8859_6:   charmap.ISO8859_6,
+	ISO8859_7:   charmap.ISO8859_7,
+	ISO8859_8:   charmap.ISO8859_8,
+	ISO8859_9:   charmap.ISO8859_9,
+	ISO8859_10:  charmap.ISO8859_10,
+	ISO8859_13:  charmap.ISO8859_13,
+	ISO8859_14:  charmap.ISO8859_14,
+	ISO8859_15:  charmap.ISO8859_15,
+	CodePage437: charmap.CodePage437,
+	CodePage850: charmap.CodePage850,
+	CodePage852: charmap.CodePage852,
+	CodePage855: charmap.CodePage855,
+	CodePage860: charmap.CodePage860,
+	CodePage863: charmap.CodePage863,
+	CodePage865: charmap.CodePage865,
+	CodePage866: charmap.CodePage866,
+	UTF16BE:     unicode.UTF16(unicode.BigEndian, unicode.IgnoreBOM),
+}
+
+var fallbackCodec encoding.Encoding = charmap.ISO8859_1 // be lenient and use ISO8859-1 as fallback if anything goes havoc
 
 // TextBytes returns the length in bytes of an encoded text with
 // the given number of characters and the given encoding
@@ -95,39 +153,40 @@ func (h TextHeader) Length() int {
 }
 
 // DecodePayloadText decodes the actual text content using the given encoding scheme according to [AI] 29.5.4
-func DecodePayloadText(encoding TextEncoding, bytes []byte) (string, error) {
-	switch encoding {
-	case ISO8859_1: // only ISO8859-1 at the moment
-		return decodeISO8859_1(bytes)
-	default: // be lenient and use ISO8859-1 as fallback
-		log.Printf("encoding 0x%x is currently not supported, using ISO8859-1 as fallback", encoding)
-		return decodeISO8859_1(bytes)
+func DecodePayloadText(textEncoding TextEncoding, bytes []byte) (string, error) {
+	var decoder *encoding.Decoder
+	codec, ok := TextCodecs[textEncoding]
+	if ok {
+		decoder = codec.NewDecoder()
+	} else { // we have no matching codec, but be lenient and use the fallback
+		decoder = fallbackCodec.NewDecoder()
 	}
+
+	utf8, err := decoder.Bytes(bytes)
+	return string(utf8), err
 }
 
-func decodeISO8859_1(bytes []byte) (string, error) {
-	utf8Buf := make([]rune, len(bytes))
-	for i, b := range bytes {
-		utf8Buf[i] = rune(b)
-	}
-	return string(utf8Buf), nil
-}
-
-func AppendEncodedPayloadText(bytes []byte, bits int, text string, encoding TextEncoding) ([]byte, int) {
+// AppendEncodedPayloadText encodes the given payload text using the given text encoding and appends the result to the given byte slice.
+func AppendEncodedPayloadText(bytes []byte, bits int, text string, textEncoding TextEncoding) ([]byte, int) {
 	var encodedBytes []byte
 	var encodedBits int
-	switch encoding {
-	case ISO8859_1: // only ISO8859-1 at the moment
-		encodedBytes, encodedBits = encodeISO8859_1(text)
-	default: // be lenient and use ISO8859-1 as fallback
-		encodedBytes, encodedBits = encodeISO8859_1(text)
+	var err error
+
+	var encoder *encoding.Encoder
+	codec, ok := TextCodecs[textEncoding]
+	if ok {
+		encoder = codec.NewEncoder()
+	} else { // we have no matching codec, but be lenient and use the fallback
+		encoder = fallbackCodec.NewEncoder()
 	}
+
+	encodedBytes, err = encoder.Bytes([]byte(text))
+	if err != nil { // something went wrong, but be lenient and use the fallback
+		encodedBytes = []byte(text)
+	}
+	encodedBits = len(encodedBytes) * 8
 
 	bytes = append(bytes, encodedBytes...)
 	bits += encodedBits
 	return bytes, bits
-}
-
-func encodeISO8859_1(text string) ([]byte, int) {
-	return []byte(text), len(text) * 8
 }
