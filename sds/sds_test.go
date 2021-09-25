@@ -32,10 +32,10 @@ func TestParseMessage(t *testing.T) {
 		},
 		{
 			desc:   "simple text message",
-			header: "+CTSDSR: 12,1234567,0,2345678,0,224",
+			header: "+CTSDSR: 12,1234567,0,2345678,0,104",
 			pdu:    "0201746573746D657373616765",
 			expected: IncomingMessage{
-				Header: Header{AIService: SDSTLService, Source: "1234567", Destination: "2345678", PDUBits: 224},
+				Header: Header{AIService: SDSTLService, Source: "1234567", Destination: "2345678", PDUBits: 104},
 				Payload: SimpleTextMessage{
 					protocol: SimpleTextMessaging,
 					Encoding: ISO8859_1,
@@ -492,6 +492,18 @@ func TestEncode(t *testing.T) {
 			},
 			expectedBytes: []byte{0x82, 0x06, 0xC9, 0x81, 0x44, 0x5A, 0x8F, 0x74, 0x65, 0x73, 0x74, 0x6D, 0x65, 0x73, 0x73, 0x61, 0x67, 0x65},
 			expectedBits:  144,
+		},
+		{
+			desc: "simple text message",
+			values: []Encoder{
+				SimpleTextMessage{
+					protocol: SimpleTextMessaging,
+					Encoding: ISO8859_1,
+					Text:     "testmessage",
+				},
+			},
+			expectedBytes: []byte{0x02, 0x01, 0x74, 0x65, 0x73, 0x74, 0x6D, 0x65, 0x73, 0x73, 0x61, 0x67, 0x65},
+			expectedBits:  104,
 		},
 	}
 	for _, tc := range tt {

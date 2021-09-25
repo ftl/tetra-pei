@@ -360,7 +360,7 @@ func ParseSDSTransfer(bytes []byte) (SDSTransfer, error) {
 }
 
 // NewTextMessageTransfer returns a new SDS-TRANSFER PDU for text messaging with the given parameters
-func NewTextMessageTransfer(messageReference MessageReference, immediate bool, deliveryReport DeliveryReportRequest, text string) SDSTransfer {
+func NewTextMessageTransfer(messageReference MessageReference, immediate bool, deliveryReport DeliveryReportRequest, encoding TextEncoding, text string) SDSTransfer {
 	var protocol ProtocolIdentifier
 	if immediate {
 		protocol = ImmediateTextMessaging
@@ -374,7 +374,7 @@ func NewTextMessageTransfer(messageReference MessageReference, immediate bool, d
 		DeliveryReportRequest: deliveryReport,
 		UserData: TextSDU{
 			TextHeader: TextHeader{
-				Encoding: ISO8859_1,
+				Encoding: encoding,
 			},
 			Text: text,
 		},
@@ -750,6 +750,7 @@ type ExternalSubscriberNumberDigit byte // its only 4 bits per digit
 
 /* Simple Text Messaging related types and functions */
 
+// ParseSimpleTextMessage parses a simple text message PDU
 func ParseSimpleTextMessage(bytes []byte) (SimpleTextMessage, error) {
 	if len(bytes) < 2 {
 		return SimpleTextMessage{}, fmt.Errorf("simple text message PDU too short: %d", len(bytes))
@@ -768,6 +769,22 @@ func ParseSimpleTextMessage(bytes []byte) (SimpleTextMessage, error) {
 	return result, nil
 }
 
+// NewSimpleTextMessage returns a new simple text message PDU according to the given parameters
+func NewSimpleTextMessage(immediate bool, encoding TextEncoding, text string) SimpleTextMessage {
+	var protocol ProtocolIdentifier
+	if immediate {
+		protocol = ImmediateTextMessaging
+	} else {
+		protocol = TextMessaging
+	}
+
+	return SimpleTextMessage{
+		protocol: protocol,
+		Encoding: encoding,
+		Text:     text,
+	}
+}
+
 // SimpleTextMessage represents the data of a simple text messaging PDU, according to [AI] 29.5.2.3
 type SimpleTextMessage struct {
 	protocol ProtocolIdentifier
@@ -778,6 +795,16 @@ type SimpleTextMessage struct {
 // Immediate indiciates if this message should be displayed/handled immediately by the TE.
 func (m SimpleTextMessage) Immediate() bool {
 	return m.protocol == SimpleImmediateTextMessaging
+}
+
+// Encode this simple text message
+func (m SimpleTextMessage) Encode(bytes []byte, bits int) ([]byte, int) {
+	bytes, bits = m.protocol.Encode(bytes, bits)
+	bytes = append(bytes, byte(m.Encoding))
+	bits += 8
+	bytes, bits = AppendEncodedPayloadText(bytes, bits, m.Text, m.Encoding)
+
+	return bytes, bits
 }
 
 /* Text messaging related types and functions */
