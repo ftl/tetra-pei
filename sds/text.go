@@ -76,6 +76,32 @@ var TextCodecs = map[TextEncoding]encoding.Encoding{
 
 var fallbackCodec encoding.Encoding = charmap.ISO8859_1 // be lenient and use ISO8859-1 as fallback if anything goes havoc
 
+// EncodingByName maps allows to access all the supported encodings by their name as string
+var EncodingByName = map[string]TextEncoding{
+	"ISO8859-1":   ISO8859_1,
+	"ISO8859-2":   ISO8859_2,
+	"ISO8859-3":   ISO8859_3,
+	"ISO8859-4":   ISO8859_4,
+	"ISO8859-5":   ISO8859_5,
+	"ISO8859-6":   ISO8859_6,
+	"ISO8859-7":   ISO8859_7,
+	"ISO8859-8":   ISO8859_8,
+	"ISO8859-9":   ISO8859_9,
+	"ISO8859-10":  ISO8859_10,
+	"ISO8859-13":  ISO8859_13,
+	"ISO8859-14":  ISO8859_14,
+	"ISO8859-15":  ISO8859_15,
+	"CodePage437": CodePage437,
+	"CodePage850": CodePage850,
+	"CodePage852": CodePage852,
+	"CodePage855": CodePage855,
+	"CodePage860": CodePage860,
+	"CodePage863": CodePage863,
+	"CodePage865": CodePage865,
+	"CodePage866": CodePage866,
+	"UTF16BE":     UTF16BE,
+}
+
 // TextBytes returns the length in bytes of an encoded text with
 // the given number of characters and the given encoding
 func TextBytes(encoding TextEncoding, length int) int {
