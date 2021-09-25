@@ -360,7 +360,7 @@ func ParseSDSTransfer(bytes []byte) (SDSTransfer, error) {
 }
 
 // NewTextMessageTransfer returns a new SDS-TRANSFER PDU for text messaging with the given parameters
-func NewTextMessageTransfer(messageReference MessageReference, immediate bool, text string) SDSTransfer {
+func NewTextMessageTransfer(messageReference MessageReference, immediate bool, deliveryReport DeliveryReportRequest, text string) SDSTransfer {
 	var protocol ProtocolIdentifier
 	if immediate {
 		protocol = ImmediateTextMessaging
@@ -369,8 +369,9 @@ func NewTextMessageTransfer(messageReference MessageReference, immediate bool, t
 	}
 
 	return SDSTransfer{
-		protocol:         protocol,
-		MessageReference: messageReference,
+		protocol:              protocol,
+		MessageReference:      messageReference,
+		DeliveryReportRequest: deliveryReport,
 		UserData: TextSDU{
 			TextHeader: TextHeader{
 				Encoding: ISO8859_1,
