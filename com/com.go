@@ -13,6 +13,14 @@ const (
 	atSendingQueueTimeout = 500 * time.Millisecond
 )
 
+// NewWithTrace creates a new COM instance that traces all communications to a second writer.
+func NewWithTrace(device io.ReadWriter, tracer io.Writer) *COM {
+	result := New(device)
+	result.tracer = tracer
+	return result
+}
+
+// New creates a new COM instance using the given io.ReadWriter to communicate with the radio's PEI.
 func New(device io.ReadWriter) *COM {
 	lines := readLoop(device)
 	commands := make(chan command)
@@ -23,8 +31,8 @@ func New(device io.ReadWriter) *COM {
 	}
 
 	go func() {
-		// log.Print("entering COM loop")
-		// defer log.Print("exiting COM loop")
+		result.trace("****\n* SESSION START\n****\n")
+		defer result.trace("****\n* SESSION END\n****\n")
 		defer close(result.closed)
 
 		var commandCancelled <-chan struct{}
@@ -39,7 +47,7 @@ func New(device io.ReadWriter) *COM {
 				if !valid {
 					return
 				}
-				// log.Printf("rx: %s", line)
+				result.tracef("rx:  %s\nhex: %X\n--\n", line, line)
 
 				switch {
 				case activeIndication != nil:
@@ -78,7 +86,7 @@ func New(device io.ReadWriter) *COM {
 					if (lastbyte != 0x1a) && (lastbyte != 0x1b) {
 						txbytes = append(txbytes, 0x0d, 0x0a)
 					}
-					// log.Printf("tx: %v", txbytes)
+					result.tracef("tx:  %s\nhex: %X\n--\n", txbytes, txbytes)
 					device.Write(txbytes)
 					commandCancelled = cmd.cancelled
 					activeCommand = &cmd
@@ -91,9 +99,11 @@ func New(device io.ReadWriter) *COM {
 	return result
 }
 
+// COM allows to communicate with a radio's PEI using AT commands.
 type COM struct {
 	commands chan<- command
 	closed   chan struct{}
+	tracer   io.Writer
 
 	indications map[string]indicationConfig
 }
@@ -101,9 +111,6 @@ type COM struct {
 func readLoop(r io.Reader) <-chan string {
 	lines := make(chan string, 1)
 	go func() {
-		// log.Print("entering read loop")
-		// defer log.Print("exiting read loop")
-
 		buf := make([]byte, readBufferSize)
 		currentLine := make([]byte, 0, readBufferSize)
 		for {
@@ -115,7 +122,6 @@ func readLoop(r io.Reader) <-chan string {
 				close(lines)
 				return
 			} else if err != nil {
-				// log.Printf("read error: %v", err)
 				if len(currentLine) > 0 {
 					lines <- string(currentLine)
 				}
@@ -178,7 +184,6 @@ func (c *COM) ClearSyntaxErrors(ctx context.Context) error {
 			return nil
 		}
 		if err.Error() == "+CME ERROR: 35" {
-			// log.Printf(".")
 			time.Sleep(200)
 		} else {
 			return err
@@ -222,6 +227,20 @@ func (c *COM) ATs(ctx context.Context, requests ...string) error {
 		}
 	}
 	return nil
+}
+
+func (c *COM) trace(args ...interface{}) {
+	if c.tracer == nil {
+		return
+	}
+	fmt.Fprint(c.tracer, args...)
+}
+
+func (c *COM) tracef(format string, args ...interface{}) {
+	if c.tracer == nil {
+		return
+	}
+	fmt.Fprintf(c.tracer, format, args...)
 }
 
 type indicationConfig struct {
