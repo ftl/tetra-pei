@@ -26,6 +26,7 @@ func New(device io.ReadWriter) *COM {
 	commands := make(chan command)
 	result := &COM{
 		commands:    commands,
+		closing:     make(chan struct{}),
 		closed:      make(chan struct{}),
 		indications: make(map[string]indicationConfig),
 	}
@@ -43,6 +44,8 @@ func New(device io.ReadWriter) *COM {
 
 		for {
 			select {
+			case <-result.closing:
+				return
 			case line, valid := <-lines:
 				if !valid {
 					return
@@ -102,6 +105,7 @@ func New(device io.ReadWriter) *COM {
 // COM allows to communicate with a radio's PEI using AT commands.
 type COM struct {
 	commands chan<- command
+	closing  chan struct{}
 	closed   chan struct{}
 	tracer   io.Writer
 
@@ -148,12 +152,27 @@ func readLoop(r io.Reader) <-chan string {
 	return lines
 }
 
+func (c *COM) Close() {
+	select {
+	case <-c.closing:
+	default:
+		close(c.closing)
+	}
+}
+
 func (c *COM) Closed() bool {
 	select {
 	case <-c.closed:
 		return true
 	default:
 		return false
+	}
+}
+
+func (c *COM) WaitUntilClosed(ctx context.Context) {
+	select {
+	case <-c.closed:
+	case <-ctx.Done():
 	}
 }
 
