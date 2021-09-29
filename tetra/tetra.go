@@ -1,10 +1,24 @@
 package tetra
 
 import (
+	"context"
 	"encoding/hex"
 	"regexp"
 	"strings"
 )
+
+// Requester is used for commands that return more than an error code.
+type Requester interface {
+	Request(context.Context, string) ([]string, error)
+}
+
+// RequesterFunc wraps a match function into the Requester interface.
+type RequesterFunc func(context.Context, string) ([]string, error)
+
+// Request calls the wrapped RequesterFunc.
+func (f RequesterFunc) Request(ctx context.Context, request string) ([]string, error) {
+	return f(ctx, request)
+}
 
 // Identity represents an identity of a party in a TETRA communication
 type Identity string

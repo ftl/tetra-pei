@@ -211,6 +211,10 @@ func (c *COM) ClearSyntaxErrors(ctx context.Context) error {
 	return nil
 }
 
+func (c *COM) Request(ctx context.Context, request string) ([]string, error) {
+	return c.AT(ctx, request)
+}
+
 func (c *COM) AT(ctx context.Context, request string) ([]string, error) {
 	cmd := command{
 		request:   request,

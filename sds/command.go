@@ -20,16 +20,6 @@ func (f EncoderFunc) Encode() ([]byte, int) {
 	return f()
 }
 
-type Requester interface {
-	Request(context.Context, string) ([]string, error)
-}
-
-type RequesterFunc func(context.Context, string) ([]string, error)
-
-func (f RequesterFunc) Request(ctx context.Context, request string) ([]string, error) {
-	return f(ctx, request)
-}
-
 const (
 	// CRLF line ending for AT commands
 	CRLF = "\x0d\x0a"
@@ -53,7 +43,7 @@ func SendMessage(destination tetra.Identity, message Encoder) string {
 var sendMessageDescription = regexp.MustCompile(`^\+CMGS: .+\(\d*-(\d*)\)$`)
 
 // RequestMaxMessagePDUBits uses the given RequesterFunc to find out how many bits a message PDU may have (see [PEI] 6.13.2).
-func RequestMaxMessagePDUBits(ctx context.Context, requester Requester) (int, error) {
+func RequestMaxMessagePDUBits(ctx context.Context, requester tetra.Requester) (int, error) {
 	responses, err := requester.Request(ctx, "AT+CMGS=?")
 	if err != nil {
 		return 0, err
