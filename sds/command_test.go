@@ -4,6 +4,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/ftl/tetra-pei/tetra"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -33,7 +34,7 @@ func TestRequestMaxPDUBits(t *testing.T) {
 			requester := func(_ context.Context, _ string) ([]string, error) {
 				return tc.response, nil
 			}
-			actual, err := RequestMaxMessagePDUBits(context.Background(), requester)
+			actual, err := RequestMaxMessagePDUBits(context.Background(), tetra.RequesterFunc(requester))
 			if tc.invalid {
 				assert.Error(t, err)
 			} else {
