@@ -54,6 +54,20 @@ func RequestTalkgroup(ctx context.Context, requester tetra.Requester) (string, e
 	return parts[1], nil
 }
 
+const batteryChargeRequest = "AT+CBC?"
+
+var batteryChargeResponse = regexp.MustCompile(`^\+CBC: .*,(\d+)$`)
+
+// RequestBatteryCharge reads the current battery charge status according to [PEI] 6.9
+func RequestBatteryCharge(ctx context.Context, requester tetra.Requester) (int, error) {
+	parts, err := requestWithSingleLineResponse(ctx, requester, batteryChargeRequest, batteryChargeResponse, 2)
+	if err != nil {
+		return 0, err
+	}
+
+	return strconv.Atoi(parts[1])
+}
+
 const signalStrengthRequest = "AT+CSQ?"
 
 var signalStrengthResponse = regexp.MustCompile(`^\+CSQ: (\d+),(\d+)$`)
