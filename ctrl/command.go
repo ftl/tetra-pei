@@ -16,7 +16,7 @@ func SetOperatingMode(mode AIMode) string {
 	return fmt.Sprintf("AT+CTOM=%d", mode)
 }
 
-const operatingModeRequest = "AT+TOM?"
+const operatingModeRequest = "AT+CTOM?"
 
 var operatingModeResponse = regexp.MustCompile(`^\+CTOM: (\d+)$`)
 
