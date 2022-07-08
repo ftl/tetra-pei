@@ -124,6 +124,40 @@ func TextBytesToBits(encoding TextEncoding, length int) int {
 	}
 }
 
+// BitsToTextBytes returns the number of bytes of a text that fit into the given number of bits using the given encoding
+func BitsToTextBytes(encoding TextEncoding, bits int) int {
+	switch encoding {
+	case Packed7Bit:
+		return bits / 7
+	default:
+		return bits / 8
+	}
+}
+
+// SplitToMaxBits splits the given text into parts that do not exceed the given maximum number of bits using the given encoding
+func SplitToMaxBits(encoding TextEncoding, maxPDUBits int, text string) []string {
+	if text == "" {
+		return []string{}
+	}
+
+	maxPartLength := BitsToTextBytes(encoding, maxPDUBits)
+	maxPartsCount := len(text)/maxPartLength + 1
+	result := make([]string, 0, maxPartsCount)
+
+	remainingText := text
+	for len(remainingText) > maxPartLength {
+		part := remainingText[0:maxPartLength]
+		remainingText = remainingText[maxPartLength:]
+		if part != "" {
+			result = append(result, part)
+		}
+	}
+	if len(remainingText) > 0 {
+		result = append(result, remainingText)
+	}
+	return result
+}
+
 // ParseTextHeader in text messages and concatenated text messages.
 func ParseTextHeader(bytes []byte) (TextHeader, error) {
 	if len(bytes) < 1 {

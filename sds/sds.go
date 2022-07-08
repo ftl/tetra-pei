@@ -122,6 +122,11 @@ func (p ProtocolIdentifier) Encode(bytes []byte, bits int) ([]byte, int) {
 	return append(bytes, byte(p)), bits + 8
 }
 
+// Length of this protocol identifier in bytes.
+func (p ProtocolIdentifier) Length() int {
+	return 1
+}
+
 // All protocol identifiers relevant for SDS handling, according to [AI] table 29.21
 const (
 	SimpleTextMessaging            ProtocolIdentifier = 0x02
@@ -381,6 +386,72 @@ func NewTextMessageTransfer(messageReference MessageReference, immediate bool, d
 	}
 }
 
+// NewConcatenatedMessageTransfer returns a set of SDS_TRANSFER PDUs for that make up the given text using concatenated text messages with a UDH.
+func NewConcatenatedMessageTransfer(messageReference MessageReference, deliveryReport DeliveryReportRequest, encoding TextEncoding, maxPDUBits int, text string) []SDSTransfer {
+	blueprint := SDSTransfer{
+		protocol:              UserDataHeaderMessaging,
+		MessageReference:      messageReference,
+		DeliveryReportRequest: deliveryReport,
+		UserData: ConcatenatedTextSDU{
+			TextSDU: TextSDU{
+				TextHeader: TextHeader{
+					Encoding: encoding,
+				},
+				Text: "",
+			},
+			UserDataHeader: ConcatenatedTextUDH{
+				ElementID:        ConcatenatedTextMessageWithShortReference,
+				MessageReference: uint16(messageReference),
+				TotalNumber:      0,
+				SequenceNumber:   0,
+			},
+		},
+	}
+	blueprintBits := blueprint.Length() * 8
+
+	textParts := SplitToMaxBits(encoding, maxPDUBits-blueprintBits, text)
+
+	if len(textParts) == 1 {
+		return []SDSTransfer{{
+			protocol:              TextMessaging,
+			MessageReference:      messageReference,
+			DeliveryReportRequest: deliveryReport,
+			UserData: TextSDU{
+				TextHeader: TextHeader{
+					Encoding: encoding,
+				},
+				Text: text,
+			},
+		}}
+	}
+
+	result := make([]SDSTransfer, len(textParts))
+	for i, textPart := range textParts {
+		result[i] = SDSTransfer{
+			protocol:                        UserDataHeaderMessaging,
+			ServiceSelectionShortFormReport: true,
+			MessageReference:                messageReference + MessageReference(i),
+			DeliveryReportRequest:           deliveryReport,
+			UserData: ConcatenatedTextSDU{
+				TextSDU: TextSDU{
+					TextHeader: TextHeader{
+						Encoding: encoding,
+					},
+					Text: textPart,
+				},
+				UserDataHeader: ConcatenatedTextUDH{
+					ElementID:        ConcatenatedTextMessageWithShortReference,
+					MessageReference: uint16(messageReference),
+					TotalNumber:      byte(len(textParts)),
+					SequenceNumber:   byte(i + 1),
+				},
+			},
+		}
+	}
+
+	return result
+}
+
 // SDSTransfer represents the SDS-TRANSFER PDU contents as defined in [AI] 29.4.2.4
 type SDSTransfer struct {
 	protocol                        ProtocolIdentifier
@@ -410,10 +481,25 @@ func (m SDSTransfer) Encode(bytes []byte, bits int) ([]byte, int) {
 	case TextSDU:
 		bytes, bits = sdu.Encode(bytes, bits)
 	case ConcatenatedTextSDU:
-		// bytes, bits = sdu.Encode(bytes, bits)
+		bytes, bits = sdu.Encode(bytes, bits)
 	}
 
 	return bytes, bits
+}
+
+// Length of this SDS-TRANSFER in bytes.
+func (m SDSTransfer) Length() int {
+	var result int
+	result += m.protocol.Length()
+	result++ // byte1
+	result++ // message reference
+	switch sdu := m.UserData.(type) {
+	case TextSDU:
+		result += sdu.Length()
+	case ConcatenatedTextSDU:
+		result += sdu.Length()
+	}
+	return result
 }
 
 // ReceivedReportRequested indicates if for this SDS-TRANSFER PDU a delivery report is requested for receipt
@@ -857,7 +943,7 @@ func ParseConcatenatedTextSDU(bytes []byte) (ConcatenatedTextSDU, error) {
 		00: Message Type[4], Delivery Report Request[2], Service Selection/Short form report[1], Store/forward control[1]
 		C9: Message Reference[8] (0xC9) <-- This one is incremented for each part of the concatenated message
 		<no store forward control information>
-		8D: Timestamp Used[1] (yes), Text Encoding Scheme[7] (ISO8859-15/Latin 0 ???)
+		8D: Timestamp Used[1] (yes), Text Encoding Scheme[7] (ISO8859-15/Latin 0)
 		04 5A 8F: Timestamp[24]
 		05: User Data Header length[8] (5)
 		00: UDH Information Element ID[8] (0)
@@ -899,6 +985,15 @@ func ParseConcatenatedTextSDU(bytes []byte) (ConcatenatedTextSDU, error) {
 type ConcatenatedTextSDU struct {
 	TextSDU
 	UserDataHeader ConcatenatedTextUDH
+}
+
+// Encode this concatenated text SDU
+func (t ConcatenatedTextSDU) Encode(bytes []byte, bits int) ([]byte, int) {
+	bytes, bits = t.TextHeader.Encode(bytes, bits)
+	bytes, bits = t.UserDataHeader.Encode(bytes, bits)
+	bytes, bits = AppendEncodedPayloadText(bytes, bits, t.Text, t.TextHeader.Encoding)
+
+	return bytes, bits
 }
 
 // Length returns the length of this encoded concatenated text SDU in bytes.
@@ -949,9 +1044,45 @@ type ConcatenatedTextUDH struct {
 	SequenceNumber   byte
 }
 
+// Encode this concatenated text UDH
+func (h ConcatenatedTextUDH) Encode(bytes []byte, bits int) ([]byte, int) {
+	headerLengthIndex := len(bytes)
+	bytes = append(bytes, 0)
+	bits += 8
+
+	bytes = append(bytes, byte(h.ElementID))
+	bits += 8
+
+	elementLengthIndex := len(bytes)
+	bytes = append(bytes, 0)
+	bits += 8
+
+	bytes = append(bytes, byte(h.MessageReference))
+	bits += 8
+	if h.ElementID == ConcatenatedTextMessageWithLongReference {
+		bytes = append(bytes, byte(h.MessageReference>>8))
+		bits += 8
+	}
+
+	bytes = append(bytes, h.TotalNumber)
+	bits += 8
+	bytes = append(bytes, h.SequenceNumber)
+	bits += 8
+
+	bytes[headerLengthIndex] = byte(len(bytes) - headerLengthIndex - 1)
+	bytes[elementLengthIndex] = byte(len(bytes) - elementLengthIndex - 1)
+
+	return bytes, bits
+}
+
 // Length returns the length of this header in bytes.
 func (h ConcatenatedTextUDH) Length() int {
-	return int(h.HeaderLength) + 1 // the HeaderLength byte itself
+	result := 6
+	if h.ElementID == ConcatenatedTextMessageWithLongReference {
+		result++
+	}
+
+	return result
 }
 
 // UDHInformationElementID enum according to [AI] 29.5.9.4.1

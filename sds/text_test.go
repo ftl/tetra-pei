@@ -6,6 +6,116 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+func TestBitsToTextBytes(t *testing.T) {
+	tt := []struct {
+		desc          string
+		encoding      TextEncoding
+		bits          int
+		expectedBytes int
+	}{
+		{
+			desc:          "7bit, 0",
+			encoding:      Packed7Bit,
+			bits:          0,
+			expectedBytes: 0,
+		},
+		{
+			desc:          "8bit, 0",
+			encoding:      ISO8859_1,
+			bits:          0,
+			expectedBytes: 0,
+		},
+		{
+			desc:          "7bit, 1",
+			encoding:      Packed7Bit,
+			bits:          1,
+			expectedBytes: 0,
+		},
+		{
+			desc:          "8bit, 1",
+			encoding:      ISO8859_1,
+			bits:          1,
+			expectedBytes: 0,
+		},
+		{
+			desc:          "7bit, 8",
+			encoding:      Packed7Bit,
+			bits:          8,
+			expectedBytes: 1,
+		},
+		{
+			desc:          "7bit, 14",
+			encoding:      Packed7Bit,
+			bits:          14,
+			expectedBytes: 2,
+		},
+		{
+			desc:          "8bit, 14",
+			encoding:      ISO8859_1,
+			bits:          14,
+			expectedBytes: 1,
+		},
+		{
+			desc:          "7bit, 56",
+			encoding:      Packed7Bit,
+			bits:          56,
+			expectedBytes: 8,
+		},
+		{
+			desc:          "8bit, 56",
+			encoding:      ISO8859_1,
+			bits:          56,
+			expectedBytes: 7,
+		},
+	}
+	for _, tc := range tt {
+		t.Run(tc.desc, func(t *testing.T) {
+			actualBytes := BitsToTextBytes(tc.encoding, tc.bits)
+			assert.Equal(t, tc.expectedBytes, actualBytes)
+		})
+	}
+}
+
+func TestSplitToMaxBits(t *testing.T) {
+	tt := []struct {
+		encoding      TextEncoding
+		maxPDUBits    int
+		text          string
+		expectedParts []string
+	}{
+		{
+			encoding:      Packed7Bit,
+			maxPDUBits:    56,
+			text:          "7-bit, 056",
+			expectedParts: []string{"7-bit, 0", "56"},
+		},
+		{
+			encoding:      ISO8859_1,
+			maxPDUBits:    56,
+			text:          "8-bit, 056",
+			expectedParts: []string{"8-bit, ", "056"},
+		},
+		{
+			encoding:      Packed7Bit,
+			maxPDUBits:    128,
+			text:          "7-bit, 128",
+			expectedParts: []string{"7-bit, 128"},
+		},
+		{
+			encoding:      ISO8859_1,
+			maxPDUBits:    128,
+			text:          "8-bit, 128",
+			expectedParts: []string{"8-bit, 128"},
+		},
+	}
+	for _, tc := range tt {
+		t.Run(tc.text, func(t *testing.T) {
+			actualParts := SplitToMaxBits(tc.encoding, tc.maxPDUBits, tc.text)
+			assert.Equal(t, tc.expectedParts, actualParts)
+		})
+	}
+}
+
 func TestSplitLeadingOPTA(t *testing.T) {
 	tt := []struct {
 		desc         string

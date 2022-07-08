@@ -9,6 +9,7 @@ import (
 )
 
 func TestParseMessage(t *testing.T) {
+	expectedTimestamp := time.Date(time.Now().Year(), time.April, 11, 10, 15, 0, 0, time.Local)
 	tt := []struct {
 		desc      string
 		header    string
@@ -143,7 +144,7 @@ func TestParseMessage(t *testing.T) {
 					UserData: TextSDU{
 						TextHeader: TextHeader{
 							Encoding:  ISO8859_1,
-							Timestamp: time.Date(2021, time.April, 11, 10, 15, 0, 0, time.Local),
+							Timestamp: expectedTimestamp,
 						},
 						Text: "testmessage",
 					},
@@ -163,7 +164,7 @@ func TestParseMessage(t *testing.T) {
 						TextSDU: TextSDU{
 							TextHeader: TextHeader{
 								Encoding:  ISO8859_1,
-								Timestamp: time.Date(2021, time.April, 11, 10, 15, 0, 0, time.Local),
+								Timestamp: expectedTimestamp,
 							},
 							Text: "testmessage",
 						},
@@ -192,7 +193,7 @@ func TestParseMessage(t *testing.T) {
 						TextSDU: TextSDU{
 							TextHeader: TextHeader{
 								Encoding:  ISO8859_1,
-								Timestamp: time.Date(2021, time.April, 11, 10, 15, 0, 0, time.Local),
+								Timestamp: expectedTimestamp,
 							},
 							Text: "testmessage",
 						},
@@ -446,6 +447,7 @@ func TestParseHeader(t *testing.T) {
 }
 
 func TestEncode(t *testing.T) {
+	expectedTimestamp := time.Date(time.Now().Year(), time.April, 11, 8, 15, 0, 0, time.UTC)
 	tt := []struct {
 		desc          string
 		values        []Encoder
@@ -484,13 +486,13 @@ func TestEncode(t *testing.T) {
 					UserData: TextSDU{
 						TextHeader: TextHeader{
 							Encoding:  ISO8859_1,
-							Timestamp: time.Date(2021, time.April, 11, 10, 15, 0, 0, time.UTC),
+							Timestamp: expectedTimestamp,
 						},
 						Text: "testmessage",
 					},
 				},
 			},
-			expectedBytes: []byte{0x82, 0x06, 0xC9, 0x81, 0x44, 0x5A, 0x8F, 0x74, 0x65, 0x73, 0x74, 0x6D, 0x65, 0x73, 0x73, 0x61, 0x67, 0x65},
+			expectedBytes: []byte{0x82, 0x06, 0xC9, 0x81, 0x44, 0x5A, 0x0F, 0x74, 0x65, 0x73, 0x74, 0x6D, 0x65, 0x73, 0x73, 0x61, 0x67, 0x65},
 			expectedBits:  144,
 		},
 		{
@@ -504,6 +506,34 @@ func TestEncode(t *testing.T) {
 			},
 			expectedBytes: []byte{0x02, 0x01, 0x74, 0x65, 0x73, 0x74, 0x6D, 0x65, 0x73, 0x73, 0x61, 0x67, 0x65},
 			expectedBits:  104,
+		},
+		{
+			desc: "SDS-TRANSFER concatenated text message with UDH",
+			values: []Encoder{
+				SDSTransfer{
+					protocol:         UserDataHeaderMessaging,
+					MessageReference: 0xC9,
+					UserData: ConcatenatedTextSDU{
+						TextSDU: TextSDU{
+							TextHeader: TextHeader{
+								Encoding:  ISO8859_1,
+								Timestamp: expectedTimestamp,
+							},
+							Text: "testmessage",
+						},
+						UserDataHeader: ConcatenatedTextUDH{
+							HeaderLength:     5,
+							ElementID:        0,
+							ElementLength:    3,
+							MessageReference: 0xC9,
+							TotalNumber:      2,
+							SequenceNumber:   1,
+						},
+					},
+				},
+			},
+			expectedBytes: []byte{0x8A, 0x02, 0xC9, 0x81, 0x44, 0x5A, 0x0F, 0x05, 0x00, 0x03, 0xC9, 0x02, 0x01, 0x74, 0x65, 0x73, 0x74, 0x6D, 0x65, 0x73, 0x73, 0x61, 0x67, 0x65},
+			expectedBits:  192,
 		},
 	}
 	for _, tc := range tt {
