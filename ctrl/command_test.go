@@ -34,3 +34,66 @@ func TestDegreesMinutesToDecimalDegrees(t *testing.T) {
 		})
 	}
 }
+
+func TestTalkgroupRangeResponse(t *testing.T) {
+	tt := []struct {
+		response string
+		kind     string
+		min      string
+		max      string
+	}{
+		{
+			response: "+CNUMS: (0),(1-2000),(1-2000)",
+			kind:     "S",
+			min:      "1",
+			max:      "2000",
+		},
+		{
+			response: "+CNUMD: (0,1,3),(1-10000),(1-10000)",
+			kind:     "D",
+			min:      "1",
+			max:      "10000",
+		},
+	}
+	for _, tc := range tt {
+		t.Run(tc.response, func(t *testing.T) {
+			parts := talkgroupRangeResponse.FindStringSubmatch(tc.response)
+			assert.Equal(t, 6, len(parts))
+			assert.Equal(t, tc.kind, parts[1])
+			assert.Equal(t, tc.min, parts[2])
+			assert.Equal(t, tc.max, parts[5])
+		})
+	}
+}
+
+func TestParseTalkgroupInfo(t *testing.T) {
+	tt := []struct {
+		line string
+		gtsi string
+		name string
+	}{
+		{
+			line: "+CNUMD: 1,123456712341234,Test Group",
+			gtsi: "123456712341234",
+			name: "Test Group",
+		},
+		{
+			line: "+CNUMS: 1,123456712341234,Test Group",
+			gtsi: "123456712341234",
+			name: "Test Group",
+		},
+		{
+			line: "1,123456712341234,Test Group",
+			gtsi: "123456712341234",
+			name: "Test Group",
+		},
+	}
+	for _, tc := range tt {
+		t.Run(tc.line, func(t *testing.T) {
+			info, err := parseTalkgroupInfo(tc.line)
+			assert.NoError(t, err)
+			assert.Equal(t, tc.gtsi, info.GTSI)
+			assert.Equal(t, tc.name, info.Name)
+		})
+	}
+}

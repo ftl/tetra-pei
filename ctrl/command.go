@@ -54,6 +54,96 @@ func RequestTalkgroup(ctx context.Context, requester tetra.Requester) (string, e
 	return parts[1], nil
 }
 
+const (
+	talkgroupRangeRequest    = "AT+CNUM%s=?"
+	talkgroupsPrepareRequest = "AT+CNUM%s=0,%d,%d"
+	talkgroupsReadRequest    = "AT+CNUM%s?"
+)
+
+type TalkgroupKind string
+
+const (
+	TalkgroupFixed   TalkgroupKind = "F"
+	TalkgroupStatic  TalkgroupKind = "S"
+	TalkgroupDynamic TalkgroupKind = "D"
+)
+
+type TalkgroupRange struct {
+	Min int
+	Max int
+}
+
+type TalkgroupInfo struct {
+	GTSI string
+	Name string
+}
+
+// RequestTalkgroups reads all available static talkgroups from the device, see [PEI] 6.11.5.2
+func RequestTalkgroups(ctx context.Context, requester tetra.Requester, kind TalkgroupKind, result []TalkgroupInfo) ([]TalkgroupInfo, error) {
+	rng, err := RequestTalkgroupRange(ctx, requester, kind)
+	if err != nil {
+		return nil, err
+	}
+
+	prepareRequest := fmt.Sprintf(talkgroupsPrepareRequest, kind, rng.Min, rng.Max)
+	_, err = requester.Request(ctx, prepareRequest)
+	if err != nil {
+		return nil, err
+	}
+
+	readRequest := fmt.Sprintf(talkgroupsReadRequest, kind)
+	responses, err := requester.Request(ctx, readRequest)
+	if err != nil {
+		return nil, err
+	}
+	if len(responses) < 1 {
+		return nil, fmt.Errorf("no response received")
+	}
+
+	for _, line := range responses {
+		info, err := parseTalkgroupInfo(line)
+		if err != nil {
+			return nil, err
+		}
+		result = append(result, info)
+	}
+	return result, nil
+}
+
+var talkgroupInfoLine = regexp.MustCompile(`^(\+CNUM(S|D): )?(\d+),(\d+),(.+)`)
+
+func parseTalkgroupInfo(line string) (TalkgroupInfo, error) {
+	parts := talkgroupInfoLine.FindStringSubmatch(line)
+	if len(parts) != 6 {
+		return TalkgroupInfo{}, fmt.Errorf("invalid talkgroup info: %s", line)
+	}
+	return TalkgroupInfo{
+		GTSI: parts[4],
+		Name: parts[5],
+	}, nil
+}
+
+var talkgroupRangeResponse = regexp.MustCompile(`^\+CNUM(S|D): \(.*\),\((\d+)-(\d+)\),\((\d+)-(\d+)\)`)
+
+func RequestTalkgroupRange(ctx context.Context, requester tetra.Requester, kind TalkgroupKind) (TalkgroupRange, error) {
+	cmd := fmt.Sprintf("AT+CNUM%s=?", kind)
+	parts, err := requestWithSingleLineResponse(ctx, requester, cmd, talkgroupRangeResponse, 6)
+	if err != nil {
+		return TalkgroupRange{}, err
+	}
+
+	min, err := strconv.Atoi(parts[2])
+	if err != nil {
+		return TalkgroupRange{}, fmt.Errorf("cannot parse range minimum: %v", err)
+	}
+	max, err := strconv.Atoi(parts[5])
+	if err != nil {
+		return TalkgroupRange{}, fmt.Errorf("cannot parse range maximum: %v", err)
+	}
+
+	return TalkgroupRange{Min: min, Max: max}, nil
+}
+
 const batteryChargeRequest = "AT+CBC?"
 
 var batteryChargeResponse = regexp.MustCompile(`^\+CBC: .*,(\d+)$`)
