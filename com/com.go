@@ -14,14 +14,14 @@ const (
 )
 
 // NewWithTrace creates a new COM instance that traces all communications to a second writer.
-func NewWithTrace(device io.ReadWriter, tracer io.Writer) *COM {
+func NewWithTrace(device io.ReadWriteCloser, tracer io.Writer) *COM {
 	result := New(device)
 	result.tracer = tracer
 	return result
 }
 
 // New creates a new COM instance using the given io.ReadWriter to communicate with the radio's PEI.
-func New(device io.ReadWriter) *COM {
+func New(device io.ReadWriteCloser) *COM {
 	lines := readLoop(device)
 	commands := make(chan command)
 	result := &COM{
@@ -45,6 +45,7 @@ func New(device io.ReadWriter) *COM {
 		for {
 			select {
 			case <-result.closing:
+				device.Close()
 				return
 			case line, valid := <-lines:
 				if !valid {
