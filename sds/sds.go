@@ -59,6 +59,7 @@ func ParseHeader(s string) (Header, error) {
 	}
 
 	var result Header
+	var pduBitCountField string
 	headerFields := strings.Split(s[8:], ",")
 	// field order according to ETSI TS 100 392-5 V2.6.1
 	// +CTSDSR: <AI service>, [<calling party identity>], [<calling party identity type>], <called party identity>, <called party identity type>, <length>, [<end to end encryption>]<CR><LF>user data	
