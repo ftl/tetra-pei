@@ -60,14 +60,22 @@ func ParseHeader(s string) (Header, error) {
 
 	var result Header
 	headerFields := strings.Split(s[8:], ",")
+	// field order according to ETSI TS 100 392-5 V2.6.1
+	// +CTSDSR: <AI service>, [<calling party identity>], [<calling party identity type>], <called party identity>, <called party identity type>, <length>, [<end to end encryption>]<CR><LF>user data	
 	switch len(headerFields) {
-	case 3, 4: // minimum set
+	case 3: // minimum set
 		result.AIService = AIService(strings.TrimSpace(headerFields[0]))
 		result.Destination = tetra.Identity(strings.TrimSpace(headerFields[1]))
+		pduBitCountField = headerFields[2]
+	case 4: // minimum set with identity type
+		result.AIService = AIService(strings.TrimSpace(headerFields[0]))
+		result.Destination = tetra.Identity(strings.TrimSpace(headerFields[1]))
+		pduBitCountField = headerFields[3]
 	case 6, 7: // with source, with end-to-end encryption
 		result.AIService = AIService(strings.TrimSpace(headerFields[0]))
 		result.Source = tetra.Identity(strings.TrimSpace(headerFields[1]))
 		result.Destination = tetra.Identity(strings.TrimSpace(headerFields[3]))
+		pduBitCountField = headerFields[5]
 	default:
 		return Header{}, fmt.Errorf("invalid header, wrong field count: %s", s)
 	}
