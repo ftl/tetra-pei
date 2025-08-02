@@ -422,9 +422,11 @@ func TestParseHeader(t *testing.T) {
 				PDUBits:     16,
 			},
 		},
+		// field order according to ETSI TS 100 392-5 V2.6.1
+		// +CTSDSR: <AI service>, [<calling party identity>], [<calling party identity type>], <called party identity>, <called party identity type>, <length>, [<end to end encryption>]<CR><LF>user data
 		{
 			desc:  "valid with source identity and end-to-end encryption",
-			value: "+CTSDSR: 12,1234567,0,2345678,0,1,16",
+			value: "+CTSDSR: 12,1234567,0,2345678,0,16,1",
 			expected: Header{
 				AIService:   SDSTLService,
 				Source:      "1234567",
