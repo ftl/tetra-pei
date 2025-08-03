@@ -81,7 +81,6 @@ func ParseHeader(s string) (Header, error) {
 		return Header{}, fmt.Errorf("invalid header, wrong field count: %s", s)
 	}
 
-	pduBitCountField := headerFields[len(headerFields)-1]
 	var err error
 	result.PDUBits, err = strconv.Atoi(strings.TrimSpace(pduBitCountField))
 	if err != nil {
