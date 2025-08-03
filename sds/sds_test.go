@@ -261,6 +261,68 @@ func TestParseMessage(t *testing.T) {
 				},
 			},
 		},
+		{
+			desc:   "callout alert (simple callout), no report, no store/forward",
+			header: "+CTSDSR: 12,262100101234567,1,262100102345678,1,824,1",
+			pdu:    "C300110D1657111104144C155DFF54657374FE0A5465737454657374546573745465737454657374546573745465737454657374546573740A5465737454657374546573740A546573745465737454657374546573745465737454657374546573740A54657374",
+			expected: IncomingMessage{
+				Header: Header{AIService: SDSTLService, Source: "262100101234567", Destination: "262100102345678", PDUBits: 824},
+				Payload: SDSTransfer{
+					protocol:                        Callout,
+					ServiceSelectionShortFormReport: true,
+					MessageReference:                0x11,
+					UserData: CalloutAlert{
+						CalloutNumber: 				 0x65,
+						Priority:                    0x7,
+						SenderSubAddress:            0x1111,
+						ReceiverSubAddresses: []SubAddress{
+							0x144C,
+							0x155D,
+						},
+						Text: "Testþ\nTestTestTestTestTestTestTestTestTest\nTestTestTest\nTestTestTestTestTestTestTest\nTest",
+					},
+				},
+			},
+		},
+		{
+			desc:   "concatenated callout alert (simple callout) part 1 of 2, no report, no store/forward",
+			header: "+CTSDSR: 12,262100101234567,1,262100102345678,1,896,1",
+			pdu:    "8C00B910030201C30D196711111C000B000C000D000E13BC13BD13ED13F013F113F413F6141914231466FF54657374FE0A5465737454657374546573745465737454657374546573745465737454657374546573740A5465737454657374546573740A54657374546573745465737454",
+			expected: IncomingMessage{
+				Header: Header{AIService: SDSTLService, Source: "262100101234567", Destination: "262100102345678", PDUBits: 896},
+				Payload: SDSTransfer{
+					protocol:                        ConcatenatedSDSMessaging,
+					ServiceSelectionShortFormReport: true,
+					MessageReference:                0xB9,
+					UserData: ConcatenatedSDSMessageSDU{
+						ConcatenationReference: 3,
+						TotalNumber:    2,
+						SequenceNumber: 1,
+						PayloadPID: Callout,
+						PayloadData: []byte{0xd, 0x19, 0x67, 0x11, 0x11, 0x1c, 0x0, 0xb, 0x0, 0xc, 0x0, 0xd, 0x0, 0xe, 0x13, 0xbc, 0x13, 0xbd, 0x13, 0xed, 0x13, 0xf0, 0x13, 0xf1, 0x13, 0xf4, 0x13, 0xf6, 0x14, 0x19, 0x14, 0x23, 0x14, 0x66, 0xff, 0x54, 0x65, 0x73, 0x74, 0xfe, 0xa, 0x54, 0x65, 0x73, 0x74, 0x54, 0x65, 0x73, 0x74, 0x54, 0x65, 0x73, 0x74, 0x54, 0x65, 0x73, 0x74, 0x54, 0x65, 0x73, 0x74, 0x54, 0x65, 0x73, 0x74, 0x54, 0x65, 0x73, 0x74, 0x54, 0x65, 0x73, 0x74, 0x54, 0x65, 0x73, 0x74, 0xa, 0x54, 0x65, 0x73, 0x74, 0x54, 0x65, 0x73, 0x74, 0x54, 0x65, 0x73, 0x74, 0xa, 0x54, 0x65, 0x73, 0x74, 0x54, 0x65, 0x73, 0x74, 0x54, 0x65, 0x73, 0x74, 0x54},
+					},
+				},
+			},
+		},
+		{
+			desc:   "concatenated callout alert (simple callout) part 2 of 2, no report, no store/forward",
+			header: "+CTSDSR: 12,262100101234567,1,262100102345678,1,208,1",
+			pdu:    "8C00BA100302026573745465737454657374546573740A546573",
+			expected: IncomingMessage{
+				Header: Header{AIService: SDSTLService, Source: "262100101234567", Destination: "262100102345678", PDUBits: 208},
+				Payload: SDSTransfer{
+					protocol:                        ConcatenatedSDSMessaging,
+					ServiceSelectionShortFormReport: true,
+					MessageReference:                0xBA,
+					UserData: ConcatenatedSDSMessageSDU{
+						ConcatenationReference: 3,
+						TotalNumber:    2,
+						SequenceNumber: 2,
+						PayloadData: []byte{0x65, 0x73, 0x74, 0x54, 0x65, 0x73, 0x74, 0x54, 0x65, 0x73, 0x74, 0x54, 0x65, 0x73, 0x74, 0xa, 0x54, 0x65, 0x73},
+					},
+				},
+			},
+		},
 	}
 	type immediater interface {
 		Immediate() bool
@@ -432,6 +494,16 @@ func TestParseHeader(t *testing.T) {
 				Source:      "1234567",
 				Destination: "2345678",
 				PDUBits:     16,
+			},
+		},
+		{
+			desc:  "valid SDS-TL message (type 4) with source TSI, destination TSI and end-to-end encryption",
+			value: "+CTSDSR: 12,262100101234567,1,262100102345678,1,808,1",
+			expected: Header{
+				AIService:   SDSTLService,
+				Source:      "262100101234567",
+				Destination: "262100102345678",
+				PDUBits:     808,
 			},
 		},
 	}
