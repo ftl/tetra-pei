@@ -81,7 +81,6 @@ func ParseHeader(s string) (Header, error) {
 		return Header{}, fmt.Errorf("invalid header, wrong field count: %s", s)
 	}
 
-	pduBitCountField := headerFields[len(headerFields)-1]
 	var err error
 	result.PDUBits, err = strconv.Atoi(strings.TrimSpace(pduBitCountField))
 	if err != nil {
@@ -145,6 +144,7 @@ const (
 	ImmediateTextMessaging         ProtocolIdentifier = 0x89
 	UserDataHeaderMessaging        ProtocolIdentifier = 0x8A
 	ConcatenatedSDSMessaging       ProtocolIdentifier = 0x8C
+	Callout                        ProtocolIdentifier = 0xC3
 )
 
 /* SDS-TL related types and functions */
@@ -152,7 +152,8 @@ const (
 // ParseSDSTLPDU parses an SDS-TL PDU from the given bytes according to [AI] 29.4.1.
 // This function currently supports only a subset of the possible protocol identifiers:
 // Simple text messaging (0x02), simple immediate text messaging (0x09), text messaging (0x82),
-// immediate text messaging (0x89), message with user data header (0x8A)
+// immediate text messaging (0x89), message with user data header (0x8A),
+// concatenated SDS messaging (0x8C), and callout (0xC3).
 func ParseSDSTLPDU(bytes []byte) (interface{}, error) {
 	if len(bytes) == 0 {
 		return nil, fmt.Errorf("empty payload")
@@ -161,7 +162,7 @@ func ParseSDSTLPDU(bytes []byte) (interface{}, error) {
 	switch ProtocolIdentifier(bytes[0]) {
 	case SimpleTextMessaging, SimpleImmediateTextMessaging:
 		return ParseSimpleTextMessage(bytes)
-	case TextMessaging, ImmediateTextMessaging, UserDataHeaderMessaging:
+	case TextMessaging, ImmediateTextMessaging, UserDataHeaderMessaging, ConcatenatedSDSMessaging, Callout:
 		return parseSDSTLMessage(bytes)
 	default:
 		return nil, fmt.Errorf("protocol 0x%x not supported", bytes[0])
@@ -361,6 +362,10 @@ func ParseSDSTransfer(bytes []byte) (SDSTransfer, error) {
 		sdu, err = ParseTextSDU(bytes[userdataStart:])
 	case UserDataHeaderMessaging:
 		sdu, err = ParseConcatenatedTextSDU(bytes[userdataStart:])
+	case ConcatenatedSDSMessaging:
+		sdu, err = ParseConcatenatedSDSMessageSDU(bytes[userdataStart:])
+	case Callout:
+		sdu, err = ParseCalloutSDU(bytes[userdataStart:])
 	default:
 		return SDSTransfer{}, fmt.Errorf("protocol 0x%x is not supported as SDS-TRANSFER content", bytes[0])
 	}
@@ -1103,6 +1108,124 @@ const (
 	ConcatenatedTextMessageWithLongReference  UDHInformationElementID = 0x08
 )
 
+/* Concatenated SDS messaging related types and functions */
+
+func ParseConcatenatedSDSMessageSDU(bytes []byte) (ConcatenatedSDSMessageSDU, error) {
+	/*
+		Parses the structure of a Concatenated SDS message (PID 0x8C) :
+
+		1. Concatenation Control Header (4 bits)
+			Bits:   7   6   5  | 4 |  3   2   1   0
+				----------- --- ---------------
+				PDU Type     | Reference Extension Present
+
+			- PDU Type (bits 7–5): Must be 0b000 (Concatenation Transfer)
+			- Reference Extension Present (bit 4):
+				- 0 = only short reference used (4 bits total)
+				- 1 = extension present (12-bit reference total)
+
+			the next 4 bits (bits 3-0) will either be the upper 4 bits of the reference
+			(if extension is present) or the short reference (if extension is not present)
+
+		2. Concatenation Reference Extension (optional, 8 bits)
+			- Present only if Reference Extension Present == 1
+			- Contains the upper 8 bits of the 12-bit reference value
+
+		3. Short Reference (4 bits):
+			- Always present, even when extension is used
+			- Forms the lower 4 bits of the reference number
+
+		4. Total Number of Concatenation Parts (1 byte)
+			- Range: 2–255
+			- All parts of a single concatenated message share the same reference and total
+
+		5. Sequence Number of Current Part (1 byte)
+			- Range: 1–255
+			- Indicates the position of this fragment (1 = first)
+
+		6. Payload Protocol Identifier (optional, 1 byte)
+			- Present only if Sequence Number == 1
+			- Identifies the actual SDS PID of the original (unfragmented) message
+			- Not present in parts 2 and onward
+
+		7. Payload Data (remaining bytes)
+			- The actual SDS application payload fragment for this message part
+			- May be empty (e.g. padding or protocol artifacts)
+	*/
+
+	var result ConcatenatedSDSMessageSDU
+
+	offset := 0
+	if len(bytes) < offset+1 {
+		return result, fmt.Errorf("data too short for concatenation control header")
+	}
+
+	ctrlByte := bytes[offset]
+
+	// Extract the PDU type from bits 7–5 (should be 0b000 for "Concatenation Transfer")
+	pduType := (ctrlByte & 0xE0) >> 5
+	if pduType != 0b000 {
+		return result, fmt.Errorf("unsupported PDU type: %03b", pduType)
+	}
+
+	// Bit 4 indicates whether the reference extension is present
+	refType := (ctrlByte & 0x10) >> 4
+
+	offset++ // move past the control byte
+
+	if refType == 1 {
+		// Reference extension is present — need to read the next byte
+		if len(bytes) < offset+1 {
+			return result, fmt.Errorf("missing reference extension byte")
+		}
+
+		extByte := bytes[offset]
+		offset++
+
+		// Combine into 12-bit reference:
+		// ctrlByte bits 3-0 (upper 4 ext bits) go to positions 11-8
+		// extByte bits 7-0 (lower 4 ext bits + short ref) go to positions 7-0
+		result.ConcatenationReference = (uint16(ctrlByte&0x0F) << 8) | uint16(extByte)
+	} else {
+		// No extension — 4-bit reference only from bits 3-0 of control byte
+		result.ConcatenationReference = uint16(ctrlByte & 0x0F)
+	}
+
+	// TotalNumber and SequenceNumber
+	if len(bytes) < offset+2 {
+		return result, fmt.Errorf("missing total number or sequence number")
+	}
+	result.TotalNumber = bytes[offset]
+	offset++
+	result.SequenceNumber = bytes[offset]
+	offset++
+
+	if result.SequenceNumber == 1 {
+		if len(bytes) < offset+1 {
+			return result, fmt.Errorf("missing payload PID")
+		}
+		result.PayloadPID = ProtocolIdentifier(bytes[offset])
+		offset++
+	}
+
+	// PayloadData
+	if offset > len(bytes) {
+		return result, fmt.Errorf("offset exceeds data length")
+	}
+	result.PayloadData = bytes[offset:]
+
+	return result, nil
+}
+
+// ConcatenatedSDSMessageSDU according to [AI] 29.5.14.12
+type ConcatenatedSDSMessageSDU struct {
+	ConcatenationReference uint16
+	TotalNumber            byte
+	SequenceNumber         byte
+	PayloadPID             ProtocolIdentifier
+	PayloadData            []byte
+}
+
 /* Status related types and functions */
 
 // ParseStatus from the given bytes.
@@ -1203,4 +1326,139 @@ func EncodeTimestampUTC(timestamp time.Time) []byte {
 	result[2] |= byte(utc.Minute()) & 0x3F
 
 	return result
+}
+
+/* Callout related types and functions */
+
+// Simple Callout Service as defined in TTR001-21 V2.1.1 (2014-11):
+// TETRA Interoperability Profile (TIP) Part 21: Callout
+func ParseCalloutSDU(bytes []byte) (CalloutAlert, error) {
+	/*
+		[TLV: 0x0D + packed callout number + priority]
+		               └─ Packed byte: [Length:4bits][CalloutMSB:4bits] + remaining bytes
+		[Sender Address: 2 bytes]
+		[Receiver Count: 1 byte]
+		[Receiver Addresses: 2 bytes each]
+		[Separator: 0xFF]
+		[Text: remaining bytes, ISO8859-1]
+	*/
+
+	if len(bytes) < 4 { // Minimum size: PID(2) + GroupControl(2)
+		return CalloutAlert{}, fmt.Errorf("callout alert PDU too short: %d bytes", len(bytes))
+	}
+
+	var result CalloutAlert
+	offset := 0
+
+	// Parse TLV fields
+	tlvLoop:
+	for offset < len(bytes) {
+		if offset >= len(bytes) {
+			break
+		}
+
+		// Check type field (8 bits = 1 byte)
+		typeField := bytes[offset]
+
+		switch typeField {
+		case 0x0D: // Callout Number follows
+			offset += 1 // Skip type field
+			if offset >= len(bytes) {
+				return CalloutAlert{}, fmt.Errorf("insufficient bytes for packed fields")
+			}
+
+			// Parse packed byte containing length (upper 4 bits) and first part of callout number (lower 4 bits)
+			packedByte := bytes[offset]
+			lengthInBytes := int(packedByte >> 4)
+
+			if offset + lengthInBytes >= len(bytes) {
+				return CalloutAlert{}, fmt.Errorf("insufficient bytes for callout number and priority")
+			}
+
+			// Convert the callout number bytes to a single integer
+			var calloutNumber uint32 = 0
+
+			// First byte: constructed from packed byte and next byte
+			firstByte := (packedByte & 0x0F) << 4 | (bytes[offset+1] >> 4)
+			calloutNumber = uint32(firstByte)
+
+			// Add remaining bytes (if any) to build the complete integer
+			for i := 1; i < lengthInBytes; i++ {
+				calloutNumber = (calloutNumber << 8) | uint32(bytes[offset+i+1])
+			}
+
+			result.CalloutNumber = calloutNumber
+
+			// Priority is in the lower 4 bits after the complete callout number
+			priorityByteOffset := offset + lengthInBytes
+			result.Priority = bytes[priorityByteOffset] & 0x0F
+
+			offset = priorityByteOffset + 1
+
+		default:
+			break tlvLoop // Not a known TLV type, assume we've reached the fixed fields
+		}
+	}
+
+	// Parse remaining fixed fields: SenderSubAddress + ReceiverSubAddrLen + ReceiverSubAddresses + Text
+	if offset+3 > len(bytes) { // SenderAddr(2) + RecvAddrLen(1)
+		return CalloutAlert{}, fmt.Errorf("insufficient bytes for fixed fields")
+	}
+
+	// Parse Sender Sub Address (2 bytes)
+	result.SenderSubAddress = uint16((uint32(bytes[offset]) << 8) | uint32(bytes[offset+1]))
+	offset += 2
+
+	// Parse Receiver Sub Address Length (1 byte) - number of bytes for receiver addresses
+	ReceiverSubAddrLen := uint8(bytes[offset])
+	offset += 1
+
+	// Calculate how many bytes the receiver sub-addresses take up
+	receiverSubAddrBytes := int(ReceiverSubAddrLen) // Direct byte count
+
+	if len(bytes) < offset+receiverSubAddrBytes {
+		return result, fmt.Errorf("callout alert PDU too short for receiver sub-addresses: %d bytes", len(bytes))
+	}
+
+	// Parse Receiver Sub Addresses (2 bytes each)
+	numAddresses := receiverSubAddrBytes / 2
+	result.ReceiverSubAddresses = make([]SubAddress, numAddresses)
+	for i := 0; i < numAddresses; i++ {
+		addrOffset := offset + (i * 2)
+		result.ReceiverSubAddresses[i] = SubAddress((uint16(bytes[addrOffset]) << 8) | uint16(bytes[addrOffset+1]))
+	}
+	offset += receiverSubAddrBytes
+
+	// Skip separator (1 byte - should be 0xFF) - we don't store it, just verify it's there
+	if len(bytes) < offset+1 {
+		return CalloutAlert{}, fmt.Errorf("callout alert PDU missing separator")
+	}
+	separator := bytes[offset]
+	if separator != 0xFF {
+		return CalloutAlert{}, fmt.Errorf("invalid separator: expected 0xFF, got 0x%02X", separator)
+	}
+	offset += 1
+
+	// Parse Text (rest of the message)
+	if offset < len(bytes) {
+		// For simple callout messages, encoding is fixed to Latin-1
+		text, err := DecodePayloadText(ISO8859_1, bytes[offset:])
+		if err != nil {
+			return CalloutAlert{}, fmt.Errorf("failed to decode callout text: %w", err)
+		}
+		result.Text = text
+	}
+
+	return result, nil
+}
+
+type SubAddress uint16
+
+// CalloutAlert represents a callout alert PDU (PID 0xC3) for paging sub-addresses with text display
+type CalloutAlert struct {
+	CalloutNumber        uint32
+	Priority             uint8
+	SenderSubAddress     uint16
+	ReceiverSubAddresses []SubAddress
+	Text                 string
 }
