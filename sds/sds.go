@@ -1205,7 +1205,8 @@ func ParseConcatenatedSDSMessageSDU(bytes []byte) (ConcatenatedSDSMessageSDU, er
 			return result, fmt.Errorf("missing payload PID")
 		}
 		result.PayloadPID = ProtocolIdentifier(bytes[offset])
-		offset++
+		// needs to be included in first message payload to be available for later parsing
+		//offset++
 	}
 
 	// PayloadData
