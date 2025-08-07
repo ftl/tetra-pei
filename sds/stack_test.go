@@ -230,6 +230,67 @@ func TestStack_Put_MultiPartConcatenatedMessage(t *testing.T) {
 	assert.Equal(t, expected, message)
 }
 
+func TestStack_Put_MultiPartConcatenatedSDSMessage(t *testing.T) {
+	values := []IncomingMessage{
+		{
+			Header: Header{AIService: SDSTLService, Source: "262100101234567", Destination: "262100102345678", PDUBits: 896},
+			Payload: SDSTransfer{
+				protocol:                        ConcatenatedSDSMessaging,
+				ServiceSelectionShortFormReport: true,
+				MessageReference:                0xB9,
+				UserData: ConcatenatedSDSMessageSDU{
+					ConcatenationReference: 3,
+					TotalNumber:    2,
+					SequenceNumber: 1,
+					PayloadPID: Callout,
+					PayloadData: []byte{0xc3, 0xd, 0x19, 0x67, 0x11, 0x11, 0x1c, 0x0, 0xb, 0x0, 0xc, 0x0, 0xd, 0x0, 0xe, 0x13, 0xbc, 0x13, 0xbd, 0x13, 0xed, 0x13, 0xf0, 0x13, 0xf1, 0x13, 0xf4, 0x13, 0xf6, 0x14, 0x19, 0x14, 0x23, 0x14, 0x66, 0xff, 0x54, 0x65, 0x73, 0x74, 0xfe, 0xa, 0x54, 0x65, 0x73, 0x74, 0x54, 0x65, 0x73, 0x74, 0x54, 0x65, 0x73, 0x74, 0x54, 0x65, 0x73, 0x74, 0x54, 0x65, 0x73, 0x74, 0x54, 0x65, 0x73, 0x74, 0x54, 0x65, 0x73, 0x74, 0x54, 0x65, 0x73, 0x74, 0x54, 0x65, 0x73, 0x74, 0xa, 0x54, 0x65, 0x73, 0x74, 0x54, 0x65, 0x73, 0x74, 0x54, 0x65, 0x73, 0x74, 0xa, 0x54, 0x65, 0x73, 0x74, 0x54, 0x65, 0x73, 0x74, 0x54, 0x65, 0x73, 0x74, 0x54},
+				},
+			},
+		},
+		{
+			Header: Header{AIService: SDSTLService, Source: "262100101234567", Destination: "262100102345678", PDUBits: 208},
+			Payload: SDSTransfer{
+				protocol:                        ConcatenatedSDSMessaging,
+				ServiceSelectionShortFormReport: true,
+				MessageReference:                0xBA,
+				UserData: ConcatenatedSDSMessageSDU{
+					ConcatenationReference: 3,
+					TotalNumber:    2,
+					SequenceNumber: 2,
+					PayloadData: []byte{0x65, 0x73, 0x74, 0x54, 0x65, 0x73, 0x74, 0x54, 0x65, 0x73, 0x74, 0x54, 0x65, 0x73, 0x74, 0xa, 0x54, 0x65, 0x73},
+				},
+			},
+		},
+	}
+	expected := Message{
+		ID:          0x03,
+		Source:      "262100101234567",
+		Destination: "262100102345678",
+		parts: []part{
+			{Valid: true, Text: "\xc3\r\x19g\x11\x11\x1c\x00\v\x00\f\x00\r\x00\x0e\x13\xbc\x13\xbd\x13\xed\x13\xf0\x13\xf1\x13\xf4\x13\xf6\x14\x19\x14#\x14f\xffTest\xfe\nTestTestTestTestTestTestTestTestTest\nTestTestTest\nTestTestTestT"},
+			{Valid: true, Text: "estTestTestTest\nTes"},
+		},
+	}
+
+	var message Message
+	messageReceived := false
+	stack := NewStack().WithMessageCallback(func(m Message) {
+		message = m
+		messageReceived = true
+	})
+
+	for i, value := range values {
+		err := stack.Put(value)
+		require.NoErrorf(t, err, "part %d", i)
+	}
+
+	// reset runtime-generated timestamp to avoid timestamp mismatch in test
+	message.Timestamp = time.Time{}
+
+	assert.True(t, messageReceived)
+	assert.Equal(t, expected, message)
+}
+
 func TestStack_Put_TextMessage_ReceiptReportRequested(t *testing.T) {
 	value := IncomingMessage{
 		Header: Header{AIService: SDSTLService, Source: "1234567", Destination: "2345678", PDUBits: 120},
