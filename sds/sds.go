@@ -2,7 +2,6 @@ package sds
 
 import (
 	"fmt"
-	"log"
 	"strconv"
 	"strings"
 	"time"
@@ -13,38 +12,9 @@ import (
 // ParseIncomingMessage parses an incoming message with the given header and PDU bytes. The message may
 // be part of a concatenated text message with user data header, a simple text message, a text message,
 // or a status.
+// This function is a shortcut for using a new Parser in its default configuration.
 func ParseIncomingMessage(headerString string, pduHex string) (IncomingMessage, error) {
-	header, err := ParseHeader(headerString)
-	if err != nil {
-		return IncomingMessage{}, err
-	}
-
-	pduBytes, err := tetra.HexToBinary(pduHex)
-	if err != nil {
-		return IncomingMessage{}, fmt.Errorf("cannot decode hex PDU data: %w", err)
-	}
-	if len(pduBytes) != header.PDUBytes() {
-		log.Printf("got different count of pdu bytes, expected %d, but got %d", len(pduBytes), header.PDUBytes())
-	}
-	if len(pduBytes) > header.PDUBytes() {
-		pduBytes = pduBytes[0:header.PDUBytes()]
-	}
-
-	var result IncomingMessage
-	result.Header = header
-	switch header.AIService {
-	case SDSTLService:
-		result.Payload, err = ParseSDSTLPDU(pduBytes)
-	case StatusService:
-		result.Payload, err = ParseStatus(pduBytes)
-	default:
-		return IncomingMessage{}, fmt.Errorf("AI service %s is not supported", header.AIService)
-	}
-
-	if err != nil {
-		return IncomingMessage{}, err
-	}
-	return result, nil
+	return NewParser().ParseIncomingMessage(headerString, pduHex)
 }
 
 type IncomingMessage struct {
@@ -62,7 +32,7 @@ func ParseHeader(s string) (Header, error) {
 	var pduBitCountField string
 	headerFields := strings.Split(s[8:], ",")
 	// field order according to ETSI TS 100 392-5 V2.7.1
-	// +CTSDSR: <AI service>, [<calling party identity>], [<calling party identity type>], <called party identity>, <called party identity type>, <length>, [<end to end encryption>]<CR><LF>user data	
+	// +CTSDSR: <AI service>, [<calling party identity>], [<calling party identity type>], <called party identity>, <called party identity type>, <length>, [<end to end encryption>]<CR><LF>user data
 	switch len(headerFields) {
 	case 3: // minimum set
 		result.AIService = AIService(strings.TrimSpace(headerFields[0]))
@@ -161,13 +131,15 @@ func ParseSDSTLPDU(bytes []byte) (interface{}, error) {
 	case SimpleTextMessaging, SimpleImmediateTextMessaging:
 		return ParseSimpleTextMessage(bytes)
 	case TextMessaging, ImmediateTextMessaging, UserDataHeaderMessaging:
-		return parseSDSTLMessage(bytes)
+		return ParseSDSTLMessage(bytes)
 	default:
 		return nil, fmt.Errorf("protocol 0x%x not supported", bytes[0])
 	}
 }
 
-func parseSDSTLMessage(bytes []byte) (interface{}, error) {
+// ParseSDSTLMessage parses a SDS-TL message depending on the message type:
+// transfer, report, acknowledge
+func ParseSDSTLMessage(bytes []byte) (interface{}, error) {
 	if len(bytes) < 2 {
 		return nil, fmt.Errorf("payload too short: %d", len(bytes))
 	}
@@ -845,7 +817,7 @@ type ExternalSubscriberNumberDigit byte // its only 4 bits per digit
 /* Simple Text Messaging related types and functions */
 
 // ParseSimpleTextMessage parses a simple text message PDU
-func ParseSimpleTextMessage(bytes []byte) (SimpleTextMessage, error) {
+func ParseSimpleTextMessage(bytes []byte) (interface{}, error) {
 	if len(bytes) < 2 {
 		return SimpleTextMessage{}, fmt.Errorf("simple text message PDU too short: %d", len(bytes))
 	}
