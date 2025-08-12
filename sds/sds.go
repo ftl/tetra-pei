@@ -19,7 +19,7 @@ func ParseIncomingMessage(headerString string, pduHex string) (IncomingMessage, 
 
 type IncomingMessage struct {
 	Header  Header
-	Payload interface{}
+	Payload any
 }
 
 // ParseHeader from the given string. The string must include the +CTSDSR: token.
@@ -122,7 +122,7 @@ const (
 // This function currently supports only a subset of the possible protocol identifiers:
 // Simple text messaging (0x02), simple immediate text messaging (0x09), text messaging (0x82),
 // immediate text messaging (0x89), message with user data header (0x8A)
-func ParseSDSTLPDU(bytes []byte) (interface{}, error) {
+func ParseSDSTLPDU(bytes []byte) (any, error) {
 	if len(bytes) == 0 {
 		return nil, fmt.Errorf("empty payload")
 	}
@@ -139,7 +139,7 @@ func ParseSDSTLPDU(bytes []byte) (interface{}, error) {
 
 // ParseSDSTLMessage parses a SDS-TL message depending on the message type:
 // transfer, report, acknowledge
-func ParseSDSTLMessage(bytes []byte) (interface{}, error) {
+func ParseSDSTLMessage(bytes []byte) (any, error) {
 	if len(bytes) < 2 {
 		return nil, fmt.Errorf("payload too short: %d", len(bytes))
 	}
@@ -324,7 +324,7 @@ func ParseSDSTransfer(bytes []byte) (SDSTransfer, error) {
 		userdataStart += sfc.Length()
 	}
 
-	var sdu interface{}
+	var sdu any
 	var err error
 
 	switch result.protocol {
@@ -817,7 +817,7 @@ type ExternalSubscriberNumberDigit byte // its only 4 bits per digit
 /* Simple Text Messaging related types and functions */
 
 // ParseSimpleTextMessage parses a simple text message PDU
-func ParseSimpleTextMessage(bytes []byte) (interface{}, error) {
+func ParseSimpleTextMessage(bytes []byte) (any, error) {
 	if len(bytes) < 2 {
 		return SimpleTextMessage{}, fmt.Errorf("simple text message PDU too short: %d", len(bytes))
 	}
@@ -1077,7 +1077,7 @@ const (
 /* Status related types and functions */
 
 // ParseStatus from the given bytes.
-func ParseStatus(bytes []byte) (interface{}, error) {
+func ParseStatus(bytes []byte) (any, error) {
 	if len(bytes) < 2 {
 		return 0, fmt.Errorf("status value too short: %v", bytes)
 	}

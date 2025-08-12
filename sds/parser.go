@@ -7,7 +7,7 @@ import (
 	"github.com/ftl/tetra-pei/tetra"
 )
 
-type PayloadParserFunc func([]byte) (interface{}, error)
+type PayloadParserFunc func([]byte) (any, error)
 
 type Parser struct {
 	parsers map[ProtocolIdentifier]PayloadParserFunc
@@ -70,7 +70,7 @@ func (p *Parser) ParseIncomingMessage(headerString string, pduHex string) (Incom
 	return result, nil
 }
 
-func (p *Parser) parseSDSTLPDU(bytes []byte) (interface{}, error) {
+func (p *Parser) parseSDSTLPDU(bytes []byte) (any, error) {
 	if len(bytes) == 0 {
 		return nil, fmt.Errorf("empty payload")
 	}
