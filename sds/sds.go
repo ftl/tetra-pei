@@ -301,31 +301,12 @@ func (r SDSShortReport) Encode(bytes []byte, bits int) ([]byte, int) {
 
 // ParseSDSTransfer parses a SDS-TRANSFER PDU from the given bytes
 func ParseSDSTransfer(bytes []byte) (SDSTransfer, error) {
-	if len(bytes) < 4 {
-		return SDSTransfer{}, fmt.Errorf("SDS-TRANSFER PDU too short: %d", len(bytes))
-	}
-
-	var result SDSTransfer
-
-	result.Protocol = ProtocolIdentifier(bytes[0])
-	result.DeliveryReportRequest = DeliveryReportRequest((bytes[1] & 0x0C) >> 2)
-	result.ServiceSelectionShortFormReport = (bytes[1] & 0x02) == 0
-	storeForwardControl := (bytes[1] & 0x01) != 0
-	result.MessageReference = MessageReference(bytes[2])
-
-	userdataStart := 3
-	if storeForwardControl {
-		sfc, err := ParseStoreForwardControl(bytes[3:])
-		if err != nil {
-			return SDSTransfer{}, err
-		}
-
-		result.StoreForwardControl = sfc
-		userdataStart += sfc.Length()
+	result, userdataStart, err := ParseSDSTransferHeader(bytes)
+	if err != nil {
+		return SDSTransfer{}, err
 	}
 
 	var sdu any
-	var err error
 
 	switch result.Protocol {
 	case TextMessaging, ImmediateTextMessaging:
@@ -342,6 +323,33 @@ func ParseSDSTransfer(bytes []byte) (SDSTransfer, error) {
 	result.UserData = sdu
 
 	return result, nil
+}
+
+func ParseSDSTransferHeader(bytes []byte) (SDSTransfer, int, error) {
+	if len(bytes) < 4 {
+		return SDSTransfer{}, 0, fmt.Errorf("SDS-TRANSFER PDU too short: %d", len(bytes))
+	}
+
+	var result SDSTransfer
+
+	result.Protocol = ProtocolIdentifier(bytes[0])
+	result.DeliveryReportRequest = DeliveryReportRequest((bytes[1] & 0x0C) >> 2)
+	result.ServiceSelectionShortFormReport = (bytes[1] & 0x02) == 0
+	storeForwardControl := (bytes[1] & 0x01) != 0
+	result.MessageReference = MessageReference(bytes[2])
+
+	userdataStart := 3
+	if storeForwardControl {
+		sfc, err := ParseStoreForwardControl(bytes[3:])
+		if err != nil {
+			return SDSTransfer{}, 0, err
+		}
+
+		result.StoreForwardControl = sfc
+		userdataStart += sfc.Length()
+	}
+
+	return result, userdataStart, nil
 }
 
 // NewTextMessageTransfer returns a new SDS-TRANSFER PDU for text messaging with the given parameters
