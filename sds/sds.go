@@ -224,7 +224,7 @@ func ParseSDSReport(bytes []byte) (SDSReport, error) {
 // NewSDSReport creates a new SDS-REPORT PDU based on the given SDS-TRANSFER PDU without store/forward control information.
 func NewSDSReport(sdsTransfer SDSTransfer, ackRequired bool, deliveryStatus DeliveryStatus) SDSReport {
 	return SDSReport{
-		protocol:         sdsTransfer.protocol,
+		protocol:         sdsTransfer.Protocol,
 		AckRequired:      ackRequired,
 		DeliveryStatus:   deliveryStatus,
 		MessageReference: sdsTransfer.MessageReference,
@@ -307,7 +307,7 @@ func ParseSDSTransfer(bytes []byte) (SDSTransfer, error) {
 
 	var result SDSTransfer
 
-	result.protocol = ProtocolIdentifier(bytes[0])
+	result.Protocol = ProtocolIdentifier(bytes[0])
 	result.DeliveryReportRequest = DeliveryReportRequest((bytes[1] & 0x0C) >> 2)
 	result.ServiceSelectionShortFormReport = (bytes[1] & 0x02) == 0
 	storeForwardControl := (bytes[1] & 0x01) != 0
@@ -327,7 +327,7 @@ func ParseSDSTransfer(bytes []byte) (SDSTransfer, error) {
 	var sdu any
 	var err error
 
-	switch result.protocol {
+	switch result.Protocol {
 	case TextMessaging, ImmediateTextMessaging:
 		sdu, err = ParseTextSDU(bytes[userdataStart:])
 	case UserDataHeaderMessaging:
@@ -354,7 +354,7 @@ func NewTextMessageTransfer(messageReference MessageReference, immediate bool, d
 	}
 
 	return SDSTransfer{
-		protocol:              protocol,
+		Protocol:              protocol,
 		MessageReference:      messageReference,
 		DeliveryReportRequest: deliveryReport,
 		UserData: TextSDU{
@@ -369,7 +369,7 @@ func NewTextMessageTransfer(messageReference MessageReference, immediate bool, d
 // NewConcatenatedMessageTransfer returns a set of SDS_TRANSFER PDUs for that make up the given text using concatenated text messages with a UDH.
 func NewConcatenatedMessageTransfer(messageReference MessageReference, deliveryReport DeliveryReportRequest, encoding TextEncoding, maxPDUBits int, text string) []SDSTransfer {
 	blueprint := SDSTransfer{
-		protocol:              UserDataHeaderMessaging,
+		Protocol:              UserDataHeaderMessaging,
 		MessageReference:      messageReference,
 		DeliveryReportRequest: deliveryReport,
 		UserData: ConcatenatedTextSDU{
@@ -393,7 +393,7 @@ func NewConcatenatedMessageTransfer(messageReference MessageReference, deliveryR
 
 	if len(textParts) == 1 {
 		return []SDSTransfer{{
-			protocol:              TextMessaging,
+			Protocol:              TextMessaging,
 			MessageReference:      messageReference,
 			DeliveryReportRequest: deliveryReport,
 			UserData: TextSDU{
@@ -408,7 +408,7 @@ func NewConcatenatedMessageTransfer(messageReference MessageReference, deliveryR
 	result := make([]SDSTransfer, len(textParts))
 	for i, textPart := range textParts {
 		result[i] = SDSTransfer{
-			protocol:                        UserDataHeaderMessaging,
+			Protocol:                        UserDataHeaderMessaging,
 			ServiceSelectionShortFormReport: true,
 			MessageReference:                messageReference + MessageReference(i),
 			DeliveryReportRequest:           deliveryReport,
@@ -434,17 +434,17 @@ func NewConcatenatedMessageTransfer(messageReference MessageReference, deliveryR
 
 // SDSTransfer represents the SDS-TRANSFER PDU contents as defined in [AI] 29.4.2.4
 type SDSTransfer struct {
-	protocol                        ProtocolIdentifier
+	Protocol                        ProtocolIdentifier
 	DeliveryReportRequest           DeliveryReportRequest
 	ServiceSelectionShortFormReport bool
 	MessageReference                MessageReference
 	StoreForwardControl             StoreForwardControl
-	UserData                        interface{}
+	UserData                        any
 }
 
 // Encode this SDS-TRANSFER PDU
 func (m SDSTransfer) Encode(bytes []byte, bits int) ([]byte, int) {
-	bytes, bits = m.protocol.Encode(bytes, bits)
+	bytes, bits = m.Protocol.Encode(bytes, bits)
 
 	var byte1 byte
 	byte1 = byte(SDSTransferMessage) << 4
@@ -470,7 +470,7 @@ func (m SDSTransfer) Encode(bytes []byte, bits int) ([]byte, int) {
 // Length of this SDS-TRANSFER in bytes.
 func (m SDSTransfer) Length() int {
 	var result int
-	result += m.protocol.Length()
+	result += m.Protocol.Length()
 	result++ // byte1
 	result++ // message reference
 	switch sdu := m.UserData.(type) {
@@ -496,7 +496,7 @@ func (m SDSTransfer) ConsumedReportRequested() bool {
 
 // Immediate indiciates if this message should be displayed/handled immediately by the TE.
 func (m SDSTransfer) Immediate() bool {
-	return m.protocol == ImmediateTextMessaging
+	return m.Protocol == ImmediateTextMessaging
 }
 
 // MessageReference according to [AI] 29.4.3.7

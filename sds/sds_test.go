@@ -78,7 +78,7 @@ func TestParseMessage(t *testing.T) {
 			expected: IncomingMessage{
 				Header: Header{AIService: SDSTLService, Source: "1234567", Destination: "2345678", PDUBits: 120},
 				Payload: SDSTransfer{
-					protocol:         TextMessaging,
+					Protocol:         TextMessaging,
 					MessageReference: 0x9C,
 					UserData: TextSDU{
 						TextHeader: TextHeader{
@@ -96,7 +96,7 @@ func TestParseMessage(t *testing.T) {
 			expected: IncomingMessage{
 				Header: Header{AIService: SDSTLService, Source: "1234567", Destination: "2345678", PDUBits: 120},
 				Payload: SDSTransfer{
-					protocol:         ImmediateTextMessaging,
+					Protocol:         ImmediateTextMessaging,
 					MessageReference: 0x9C,
 					UserData: TextSDU{
 						TextHeader: TextHeader{
@@ -115,7 +115,7 @@ func TestParseMessage(t *testing.T) {
 			expected: IncomingMessage{
 				Header: Header{AIService: SDSTLService, Source: "1234567", Destination: "2345678", PDUBits: 152},
 				Payload: SDSTransfer{
-					protocol:         TextMessaging,
+					Protocol:         TextMessaging,
 					MessageReference: 0x9C,
 					StoreForwardControl: StoreForwardControl{
 						Valid:              true,
@@ -139,7 +139,7 @@ func TestParseMessage(t *testing.T) {
 			expected: IncomingMessage{
 				Header: Header{AIService: SDSTLService, Source: "1234567", Destination: "2345678", PDUBits: 144},
 				Payload: SDSTransfer{
-					protocol:         TextMessaging,
+					Protocol:         TextMessaging,
 					MessageReference: 0x9C,
 					UserData: TextSDU{
 						TextHeader: TextHeader{
@@ -158,7 +158,7 @@ func TestParseMessage(t *testing.T) {
 			expected: IncomingMessage{
 				Header: Header{AIService: SDSTLService, Source: "1234567", Destination: "2345678", PDUBits: 192},
 				Payload: SDSTransfer{
-					protocol:         UserDataHeaderMessaging,
+					Protocol:         UserDataHeaderMessaging,
 					MessageReference: 0xC9,
 					UserData: ConcatenatedTextSDU{
 						TextSDU: TextSDU{
@@ -187,7 +187,7 @@ func TestParseMessage(t *testing.T) {
 			expected: IncomingMessage{
 				Header: Header{AIService: SDSTLService, Source: "1234567", Destination: "2345678", PDUBits: 192},
 				Payload: SDSTransfer{
-					protocol:         UserDataHeaderMessaging,
+					Protocol:         UserDataHeaderMessaging,
 					MessageReference: 0xCA,
 					UserData: ConcatenatedTextSDU{
 						TextSDU: TextSDU{
@@ -482,7 +482,7 @@ func TestEncode(t *testing.T) {
 			desc: "SDS-TRANSFER text message, delivery report requested",
 			values: []Encoder{
 				SDSTransfer{
-					protocol:              TextMessaging,
+					Protocol:              TextMessaging,
 					DeliveryReportRequest: MessageReceivedReportRequested,
 					MessageReference:      0xC9,
 					UserData: TextSDU{
@@ -513,7 +513,7 @@ func TestEncode(t *testing.T) {
 			desc: "SDS-TRANSFER concatenated text message with UDH",
 			values: []Encoder{
 				SDSTransfer{
-					protocol:         UserDataHeaderMessaging,
+					Protocol:         UserDataHeaderMessaging,
 					MessageReference: 0xC9,
 					UserData: ConcatenatedTextSDU{
 						TextSDU: TextSDU{

@@ -68,7 +68,7 @@ func TestStack_Put_TextMessage(t *testing.T) {
 	value := IncomingMessage{
 		Header: Header{AIService: SDSTLService, Source: "1234567", Destination: "2345678", PDUBits: 120},
 		Payload: SDSTransfer{
-			protocol:         TextMessaging,
+			Protocol:         TextMessaging,
 			MessageReference: 0xC9,
 			UserData: TextSDU{
 				TextHeader: TextHeader{
@@ -107,7 +107,7 @@ func TestStack_Put_SinglePartConcatenatedMessage(t *testing.T) {
 	value := IncomingMessage{
 		Header: Header{AIService: SDSTLService, Source: "1234567", Destination: "2345678", PDUBits: 192},
 		Payload: SDSTransfer{
-			protocol:         UserDataHeaderMessaging,
+			Protocol:         UserDataHeaderMessaging,
 			MessageReference: 0xC9,
 			UserData: ConcatenatedTextSDU{
 				TextSDU: TextSDU{
@@ -157,7 +157,7 @@ func TestStack_Put_MultiPartConcatenatedMessage(t *testing.T) {
 		{
 			Header: Header{AIService: SDSTLService, Source: "1234567", Destination: "2345678", PDUBits: 200},
 			Payload: SDSTransfer{
-				protocol:         UserDataHeaderMessaging,
+				Protocol:         UserDataHeaderMessaging,
 				MessageReference: 0xC9,
 				UserData: ConcatenatedTextSDU{
 					TextSDU: TextSDU{
@@ -181,7 +181,7 @@ func TestStack_Put_MultiPartConcatenatedMessage(t *testing.T) {
 		{
 			Header: Header{AIService: SDSTLService, Source: "1234567", Destination: "2345678", PDUBits: 208},
 			Payload: SDSTransfer{
-				protocol:         UserDataHeaderMessaging,
+				Protocol:         UserDataHeaderMessaging,
 				MessageReference: 0xCA,
 				UserData: ConcatenatedTextSDU{
 					TextSDU: TextSDU{
@@ -234,7 +234,7 @@ func TestStack_Put_TextMessage_ReceiptReportRequested(t *testing.T) {
 	value := IncomingMessage{
 		Header: Header{AIService: SDSTLService, Source: "1234567", Destination: "2345678", PDUBits: 120},
 		Payload: SDSTransfer{
-			protocol:              TextMessaging,
+			Protocol:              TextMessaging,
 			MessageReference:      0xC9,
 			DeliveryReportRequest: MessageReceivedReportRequested,
 			UserData: TextSDU{
