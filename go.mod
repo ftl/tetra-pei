@@ -1,6 +1,6 @@
 module github.com/ftl/tetra-pei
 
-go 1.17
+go 1.24.3
 
 require (
 	github.com/stretchr/testify v1.7.0
