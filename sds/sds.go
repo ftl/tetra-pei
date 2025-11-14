@@ -130,7 +130,7 @@ func ParseSDSTLPDU(bytes []byte) (any, error) {
 	switch ProtocolIdentifier(bytes[0]) {
 	case SimpleTextMessaging, SimpleImmediateTextMessaging:
 		return ParseSimpleTextMessage(bytes)
-	case TextMessaging, ImmediateTextMessaging, UserDataHeaderMessaging:
+	case TextMessaging, ImmediateTextMessaging, UserDataHeaderMessaging, ConcatenatedSDSMessaging:
 		return ParseSDSTLMessage(bytes)
 	default:
 		return nil, fmt.Errorf("protocol 0x%x not supported", bytes[0])
@@ -197,7 +197,7 @@ func ParseSDSReport(bytes []byte) (SDSReport, error) {
 
 	var result SDSReport
 
-	result.protocol = ProtocolIdentifier(bytes[0])
+	result.Protocol = ProtocolIdentifier(bytes[0])
 	result.AckRequired = ((bytes[1] & 0x08) != 0)
 	storeForwardControl := (bytes[1] & 0x01) != 0
 	result.DeliveryStatus = DeliveryStatus(bytes[2])
@@ -224,7 +224,7 @@ func ParseSDSReport(bytes []byte) (SDSReport, error) {
 // NewSDSReport creates a new SDS-REPORT PDU based on the given SDS-TRANSFER PDU without store/forward control information.
 func NewSDSReport(sdsTransfer SDSTransfer, ackRequired bool, deliveryStatus DeliveryStatus) SDSReport {
 	return SDSReport{
-		protocol:         sdsTransfer.Protocol,
+		Protocol:         sdsTransfer.Protocol,
 		AckRequired:      ackRequired,
 		DeliveryStatus:   deliveryStatus,
 		MessageReference: sdsTransfer.MessageReference,
@@ -233,7 +233,7 @@ func NewSDSReport(sdsTransfer SDSTransfer, ackRequired bool, deliveryStatus Deli
 
 // SDSReport represents the SDS-REPORT PDU contents as defined in [AI] 29.4.2.2
 type SDSReport struct {
-	protocol            ProtocolIdentifier
+	Protocol            ProtocolIdentifier
 	AckRequired         bool
 	DeliveryStatus      DeliveryStatus
 	MessageReference    MessageReference
@@ -246,7 +246,7 @@ type SDSReport struct {
 
 // Encode this SDS-REPORT PDU
 func (r SDSReport) Encode(bytes []byte, bits int) ([]byte, int) {
-	bytes, bits = r.protocol.Encode(bytes, bits)
+	bytes, bits = r.Protocol.Encode(bytes, bits)
 
 	var byte1 byte
 	byte1 = byte(SDSReportMessage) << 4
@@ -313,6 +313,8 @@ func ParseSDSTransfer(bytes []byte) (SDSTransfer, error) {
 		sdu, err = ParseTextSDU(bytes[userdataStart:])
 	case UserDataHeaderMessaging:
 		sdu, err = ParseConcatenatedTextSDU(bytes[userdataStart:])
+	case ConcatenatedSDSMessaging:
+		sdu, err = ParseConcatenatedSDSMessageSDU(bytes[userdataStart:])
 	default:
 		return SDSTransfer{}, fmt.Errorf("protocol 0x%x is not supported as SDS-TRANSFER content", bytes[0])
 	}
@@ -1081,6 +1083,125 @@ const (
 	ConcatenatedTextMessageWithShortReference UDHInformationElementID = 0x00
 	ConcatenatedTextMessageWithLongReference  UDHInformationElementID = 0x08
 )
+
+/* Concatenated SDS messaging related types and functions */
+
+func ParseConcatenatedSDSMessageSDU(bytes []byte) (ConcatenatedSDSMessageSDU, error) {
+	/*
+		Parses the structure of a Concatenated SDS message (PID 0x8C) :
+
+		1. Concatenation Control Header (4 bits)
+			Bits:   7   6   5  | 4 |  3   2   1   0
+				----------- --- ---------------
+				PDU Type     | Reference Extension Present
+
+			- PDU Type (bits 7–5): Must be 0b000 (Concatenation Transfer)
+			- Reference Extension Present (bit 4):
+				- 0 = only short reference used (4 bits total)
+				- 1 = extension present (12-bit reference total)
+
+			the next 4 bits (bits 3-0) will either be the upper 4 bits of the reference
+			(if extension is present) or the short reference (if extension is not present)
+
+		2. Concatenation Reference Extension (optional, 8 bits)
+			- Present only if Reference Extension Present == 1
+			- Contains the upper 8 bits of the 12-bit reference value
+
+		3. Short Reference (4 bits):
+			- Always present, even when extension is used
+			- Forms the lower 4 bits of the reference number
+
+		4. Total Number of Concatenation Parts (1 byte)
+			- Range: 2–255
+			- All parts of a single concatenated message share the same reference and total
+
+		5. Sequence Number of Current Part (1 byte)
+			- Range: 1–255
+			- Indicates the position of this fragment (1 = first)
+
+		6. Payload Protocol Identifier (optional, 1 byte)
+			- Present only if Sequence Number == 1
+			- Identifies the actual SDS PID of the original (unfragmented) message
+			- Not present in parts 2 and onward
+
+		7. Payload Data (remaining bytes)
+			- The actual SDS application payload fragment for this message part
+			- May be empty (e.g. padding or protocol artifacts)
+	*/
+
+	var result ConcatenatedSDSMessageSDU
+
+	offset := 0
+	if len(bytes) < offset+1 {
+		return result, fmt.Errorf("data too short for concatenation control header")
+	}
+
+	ctrlByte := bytes[offset]
+
+	// Extract the PDU type from bits 7–5 (should be 0b000 for "Concatenation Transfer")
+	pduType := (ctrlByte & 0xE0) >> 5
+	if pduType != 0b000 {
+		return result, fmt.Errorf("unsupported PDU type: %03b", pduType)
+	}
+
+	// Bit 4 indicates whether the reference extension is present
+	refType := (ctrlByte & 0x10) >> 4
+
+	offset++ // move past the control byte
+
+	if refType == 1 {
+		// Reference extension is present — need to read the next byte
+		if len(bytes) < offset+1 {
+			return result, fmt.Errorf("missing reference extension byte")
+		}
+
+		extByte := bytes[offset]
+		offset++
+
+		// Combine into 12-bit reference:
+		// ctrlByte bits 3-0 (upper 4 ext bits) go to positions 11-8
+		// extByte bits 7-0 (lower 4 ext bits + short ref) go to positions 7-0
+		result.ConcatenationReference = (uint16(ctrlByte&0x0F) << 8) | uint16(extByte)
+	} else {
+		// No extension — 4-bit reference only from bits 3-0 of control byte
+		result.ConcatenationReference = uint16(ctrlByte & 0x0F)
+	}
+
+	// TotalNumber and SequenceNumber
+	if len(bytes) < offset+2 {
+		return result, fmt.Errorf("missing total number or sequence number")
+	}
+	result.TotalNumber = bytes[offset]
+	offset++
+	result.SequenceNumber = bytes[offset]
+	offset++
+
+	if result.SequenceNumber == 1 {
+		if len(bytes) < offset+1 {
+			return result, fmt.Errorf("missing payload PID")
+		}
+		result.PayloadPID = ProtocolIdentifier(bytes[offset])
+		// needs to be included in first message payload to be available for later parsing
+		//offset++
+	}
+
+	// PayloadData
+	if offset > len(bytes) {
+		return result, fmt.Errorf("offset exceeds data length")
+	}
+	result.PayloadData = bytes[offset:]
+
+	return result, nil
+}
+
+// ConcatenatedSDSMessageSDU according to [AI] 29.5.14.12
+type ConcatenatedSDSMessageSDU struct {
+	ConcatenationReference uint16
+	TotalNumber            byte
+	SequenceNumber         byte
+	PayloadPID             ProtocolIdentifier
+	PayloadData            []byte
+}
 
 /* Status related types and functions */
 

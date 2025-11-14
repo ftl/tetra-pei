@@ -188,6 +188,24 @@ func (s *Stack) putSDSTransfer(header Header, sdsTransfer SDSTransfer) error {
 			return fmt.Errorf("part does not match message 0x%x: %s != %s | %s != %s | %d != %d", message.ID, message.Source, header.Source, message.Destination, header.Destination, len(message.parts), int(sdu.UserDataHeader.TotalNumber))
 		}
 		message.SetPart(int(sdu.UserDataHeader.SequenceNumber), sdu.Text)
+	case ConcatenatedSDSMessageSDU:
+		now := time.Now()
+		messageID = int(sdu.ConcatenationReference)
+		message, ok = s.pendingMessages[messageID]
+		if !ok {
+			message = NewMessage(
+				messageID,
+				header.Source,
+				header.Destination,
+				now,
+				int(sdu.TotalNumber),
+			)
+		} else if message.Source != header.Source ||
+			message.Destination != header.Destination ||
+			len(message.parts) != int(sdu.TotalNumber) {
+			return fmt.Errorf("part does not match message 0x%x: %s != %s | %s != %s | %d != %d", message.ID, message.Source, header.Source, message.Destination, header.Destination, len(message.parts), int(sdu.TotalNumber))
+		}
+		message.SetPart(int(sdu.SequenceNumber), string(sdu.PayloadData))
 	default:
 		return fmt.Errorf("unexpected SDS-TRANSFER SDU: %T", sdu)
 	}

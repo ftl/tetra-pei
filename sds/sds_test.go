@@ -216,7 +216,7 @@ func TestParseMessage(t *testing.T) {
 			expected: IncomingMessage{
 				Header: Header{AIService: SDSTLService, Source: "1234567", Destination: "2345678", PDUBits: 32},
 				Payload: SDSReport{
-					protocol:         TextMessaging,
+					Protocol:         TextMessaging,
 					DeliveryStatus:   ReceiptAckByDestination,
 					MessageReference: 0xC9,
 				},
@@ -229,7 +229,7 @@ func TestParseMessage(t *testing.T) {
 			expected: IncomingMessage{
 				Header: Header{AIService: SDSTLService, Source: "1234567", Destination: "2345678", PDUBits: 32},
 				Payload: SDSReport{
-					protocol:         TextMessaging,
+					Protocol:         TextMessaging,
 					AckRequired:      true,
 					DeliveryStatus:   ReceiptAckByDestination,
 					MessageReference: 0xCA,
@@ -434,6 +434,16 @@ func TestParseHeader(t *testing.T) {
 				PDUBits:     16,
 			},
 		},
+		{
+			desc:  "valid SDS-TL message (type 4) with source TSI, destination TSI and end-to-end encryption",
+			value: "+CTSDSR: 12,262100101234567,1,262100102345678,1,808,1",
+			expected: Header{
+				AIService:   SDSTLService,
+				Source:      "262100101234567",
+				Destination: "262100102345678",
+				PDUBits:     808,
+			},
+		},
 	}
 	for _, tc := range tt {
 		t.Run(tc.desc, func(t *testing.T) {
@@ -469,7 +479,7 @@ func TestEncode(t *testing.T) {
 			desc: "SDS-REPORT",
 			values: []Encoder{
 				SDSReport{
-					protocol:         TextMessaging,
+					Protocol:         TextMessaging,
 					AckRequired:      true,
 					DeliveryStatus:   ReceiptAckByDestination,
 					MessageReference: 0xCA,
