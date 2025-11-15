@@ -82,11 +82,14 @@ type StatusCallback func(StatusMessage)
 
 type ResponseCallback func([]string) error
 
+type CustomSDUCallback func(any) error
+
 type Stack struct {
-	messageCallback  MessageCallback
-	statusCallback   StatusCallback
-	responseCallback ResponseCallback
-	pendingMessages  map[int]Message
+	messageCallback   MessageCallback
+	statusCallback    StatusCallback
+	responseCallback  ResponseCallback
+	customSDUCallback CustomSDUCallback
+	pendingMessages   map[int]Message
 }
 
 func NewStack() *Stack {
@@ -107,6 +110,11 @@ func (s *Stack) WithStatusCallback(callback StatusCallback) *Stack {
 
 func (s *Stack) WithResponseCallback(callback ResponseCallback) *Stack {
 	s.responseCallback = callback
+	return s
+}
+
+func (s *Stack) WithCustomSDUCallback(callback CustomSDUCallback) *Stack {
+	s.customSDUCallback = callback
 	return s
 }
 
@@ -150,6 +158,17 @@ func (s *Stack) putSDSTransfer(header Header, sdsTransfer SDSTransfer) error {
 	var message Message
 	var ok bool
 
+	// if an ACK is requested, send it, regardless of the SDU type
+	if s.responseCallback != nil && sdsTransfer.ReceivedReportRequested() {
+		ackRequired := false // TODO should be configurable or a parameter
+		sdsReport := NewSDSReport(sdsTransfer, ackRequired, ReceiptAckByDestination)
+
+		s.responseCallback([]string{
+			SwitchToSDSTL,
+			SendMessage(header.Source, sdsReport),
+		})
+	}
+
 	switch sdu := sdsTransfer.UserData.(type) {
 	case TextSDU:
 		messageID = int(sdsTransfer.MessageReference)
@@ -161,16 +180,6 @@ func (s *Stack) putSDSTransfer(header Header, sdsTransfer SDSTransfer) error {
 			1,
 		)
 		message.SetPart(1, sdu.Text)
-
-		if s.responseCallback != nil && sdsTransfer.ReceivedReportRequested() {
-			ackRequired := false // TODO should be configurable or a parameter
-			sdsReport := NewSDSReport(sdsTransfer, ackRequired, ReceiptAckByDestination)
-
-			s.responseCallback([]string{
-				SwitchToSDSTL,
-				SendMessage(header.Source, sdsReport),
-			})
-		}
 	case ConcatenatedTextSDU:
 		messageID = int(sdu.UserDataHeader.MessageReference)
 		message, ok = s.pendingMessages[messageID]
@@ -207,7 +216,7 @@ func (s *Stack) putSDSTransfer(header Header, sdsTransfer SDSTransfer) error {
 		}
 		message.SetPart(int(sdu.SequenceNumber), string(sdu.PayloadData))
 	default:
-		return fmt.Errorf("unexpected SDS-TRANSFER SDU: %T", sdu)
+		return s.customSDUCallback(sdu)
 	}
 
 	if message.Complete() && s.messageCallback != nil {
