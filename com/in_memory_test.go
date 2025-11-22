@@ -38,7 +38,7 @@ func TestInMemory_ReadClose(t *testing.T) {
 	rw := NewInMemory()
 
 	go func() {
-		time.Sleep(100)
+		time.Sleep(100 * time.Nanosecond)
 		rw.Close()
 	}()
 
@@ -53,7 +53,7 @@ func TestInMemory_ReadLater(t *testing.T) {
 	rw := NewInMemory()
 
 	go func() {
-		time.Sleep(100)
+		time.Sleep(100 * time.Nanosecond)
 		rw.PrepareRead([]byte("hello"))
 	}()
 

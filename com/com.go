@@ -204,7 +204,7 @@ func (c *COM) ClearSyntaxErrors(ctx context.Context) error {
 			return nil
 		}
 		if err.Error() == "+CME ERROR: 35" {
-			time.Sleep(200)
+			time.Sleep(200 * time.Nanosecond)
 		} else {
 			return err
 		}
@@ -253,14 +253,14 @@ func (c *COM) ATs(ctx context.Context, requests ...string) error {
 	return nil
 }
 
-func (c *COM) trace(args ...interface{}) {
+func (c *COM) trace(args ...any) {
 	if c.tracer == nil {
 		return
 	}
 	fmt.Fprint(c.tracer, args...)
 }
 
-func (c *COM) tracef(format string, args ...interface{}) {
+func (c *COM) tracef(format string, args ...any) {
 	if c.tracer == nil {
 		return
 	}
