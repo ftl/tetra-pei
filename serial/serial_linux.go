@@ -8,6 +8,24 @@ import (
 	"github.com/hedhyw/Go-Serial-Detector/pkg/v1/serialdet"
 )
 
+func ListDevices() ([]SerialDevice, error) {
+	devices, err := serialdet.List()
+	if err != nil {
+		return nil, err
+	}
+
+	result := make([]SerialDevice, len(devices))
+
+	for i, device := range devices {
+		result[i] = SerialDevice{
+			Description: device.Description(),
+			Filename:    device.Path(),
+		}
+	}
+
+	return result, nil
+}
+
 func FindRadioPortName() (string, error) {
 	devices, err := serialdet.List()
 	if err != nil {

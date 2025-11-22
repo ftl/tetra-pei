@@ -13,6 +13,11 @@ var (
 	NoPEIFound = errors.New("no active PEI device found")
 )
 
+type SerialDevice struct {
+	Description string
+	Filename    string
+}
+
 func Open(portName string) (*com.COM, error) {
 	device, err := openSerial(portName)
 	if err != nil {
