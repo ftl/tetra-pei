@@ -35,6 +35,11 @@ func New(device io.ReadWriteCloser) *COM {
 		result.trace("****\n* SESSION START\n****\n")
 		defer result.trace("****\n* SESSION END\n****\n")
 		defer close(result.closed)
+		defer func() {
+			if result.disconnectCallback != nil {
+				result.disconnectCallback()
+			}
+		}()
 
 		var commandCancelled <-chan struct{}
 		var activeCommand *command
@@ -49,6 +54,7 @@ func New(device io.ReadWriteCloser) *COM {
 				return
 			case line, valid := <-lines:
 				if !valid {
+					result.tracef("rx: connection closed\n")
 					return
 				}
 				result.tracef("rx:  %s\nhex: %X\n--\n", line, line)
@@ -91,7 +97,11 @@ func New(device io.ReadWriteCloser) *COM {
 						txbytes = append(txbytes, 0x0d, 0x0a)
 					}
 					result.tracef("tx:  %s\nhex: %X\n--\n", txbytes, txbytes)
-					device.Write(txbytes)
+					_, err := device.Write(txbytes)
+					if err != nil {
+						result.tracef("TX ERROR: %v", err)
+						cmd.err <- err
+					}
 					commandCancelled = cmd.cancelled
 					activeCommand = &cmd
 				default:
@@ -110,7 +120,8 @@ type COM struct {
 	closed   chan struct{}
 	tracer   io.Writer
 
-	indications map[string]indicationConfig
+	indications        map[string]indicationConfig
+	disconnectCallback func()
 }
 
 func readLoop(r io.Reader) <-chan string {
@@ -175,6 +186,10 @@ func (c *COM) WaitUntilClosed(ctx context.Context) {
 	case <-c.closed:
 	case <-ctx.Done():
 	}
+}
+
+func (c *COM) OnDisconnect(callback func()) {
+	c.disconnectCallback = callback
 }
 
 func (c *COM) AddIndication(prefix string, trailingLines int, handler func(lines []string)) error {
